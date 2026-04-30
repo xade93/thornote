@@ -9,14 +9,14 @@ Notebook app for information-heavy games, visual novels, novels, and detective g
 - Switch pages from the page selector.
 - View each page's entry count and storage usage.
 - Delete a page from the page menu when you are done with it.
-- **Screenshot** captures the whole screen and stores it in the notebook.
-- **Region OCR** captures the saved fixed region, runs OCR, and stores the recognized text as an editable notebook entry.
+- **Shot** captures the whole screen and stores it in the notebook.
+- **OCR** captures the saved fixed region, runs OCR, and stores the recognized text as an editable notebook entry.
 - OCR text entries can be corrected in place when recognition is inaccurate.
 - Swipe a screenshot or OCR entry sideways to delete it.
 
 **Dictionary page** keeps Japanese word lookup available for moments when a word is hard to remember. Type or paste Japanese text manually, then ThorNotes tokenizes it and shows readings and dictionary meanings.
 
-**Custom OCR region** lets you select a dialogue box or text area once, then reuse it for Region OCR. Tap Set Region the first time, or long-press Region OCR to modify it later. Full screenshots always capture the whole screen.
+**Custom OCR region** lets you select a dialogue box or text area once, then reuse it for OCR. Tap Set Region the first time, or long-press OCR to modify it later. Full screenshots always capture the whole screen.
 
 ## Tech Stack
 

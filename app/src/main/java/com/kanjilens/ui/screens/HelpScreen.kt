@@ -69,7 +69,7 @@ fun HelpScreen(
             HelpBody("Each visual novel, novel, or game can have its own notebook page. Use the page selector to switch, + to create, and the page menu to delete a page.")
             HelpBody("Each page shows its current entry count and storage usage.")
             HelpBody("Screenshot captures the whole top screen and adds it to the notebook stream.")
-            HelpBody("Region OCR captures the saved fixed region, reads Japanese text, and adds editable text to the stream. Long-press Region OCR to change the region.")
+            HelpBody("The bottom bar captures context: Shot saves the whole screen, and OCR reads the saved region. Long-press OCR to change the region.")
             HelpBody("OCR entries can be corrected directly in the notebook when recognition is inaccurate.")
             HelpBody("Swipe a screenshot or OCR entry sideways to delete it.")
 
@@ -85,7 +85,7 @@ fun HelpScreen(
 
             HelpSection("Capture Region")
             HelpBody(
-                "On the Notebook page, tap Set Region before using Region OCR, or long-press Region OCR to change it later. " +
+                "On the Notebook page, tap Set Region before using OCR, or long-press OCR to change it later. " +
                     "Screenshots always capture the whole screen; the fixed region is only used for notebook OCR."
             )
 

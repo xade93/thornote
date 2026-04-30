@@ -2,6 +2,7 @@ package com.kanjilens
 
 import android.graphics.Bitmap
 import android.os.Bundle
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -33,6 +34,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        onBackPressedDispatcher.addCallback(
+            this,
+            object : OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() {
+                    finishAndRemoveTask()
+                }
+            },
+        )
         captureManager = ScreenCaptureManager(this)
         textRecognizer = TextRecognizer()
         tokenizer = JapaneseTokenizer()

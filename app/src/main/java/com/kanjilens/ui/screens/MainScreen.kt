@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -111,6 +110,7 @@ fun MainScreen(
     var dictionaryResult by remember { mutableStateOf<AnalysisResult?>(null) }
     var dictionaryInput by remember { mutableStateOf("") }
     var pendingCapture by remember { mutableStateOf(PendingCapture.NONE) }
+    val isProcessing = captureState is CaptureState.Capturing || captureState is CaptureState.Processing
 
     fun cropBitmap(bitmap: Bitmap): Bitmap {
         if (!cropEnabled) return bitmap
@@ -202,9 +202,14 @@ fun MainScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        text = "ThorNotes",
-                        fontWeight = FontWeight.Bold,
+                    TopPageSwitch(
+                        currentPage = currentPage,
+                        onPageChange = {
+                            currentPage = it
+                            if (captureState !is CaptureState.DictionarySuccess) {
+                                onCaptureStateChange(CaptureState.Idle)
+                            }
+                        },
                     )
                 },
                 actions = {
@@ -230,6 +235,23 @@ fun MainScreen(
                 ),
             )
         },
+        bottomBar = {
+            if (currentPage == NotebookPage.NOTEBOOK) {
+                CompactCaptureBar(
+                    cropEnabled = cropEnabled,
+                    isProcessing = isProcessing,
+                    onScreenshotClick = { requestCapture(PendingCapture.SCREENSHOT) },
+                    onOcrClick = {
+                        if (cropEnabled) {
+                            requestCapture(PendingCapture.REGION_OCR)
+                        } else {
+                            requestCapture(PendingCapture.CROP)
+                        }
+                    },
+                    onEditRegionClick = { requestCapture(PendingCapture.CROP) },
+                )
+            }
+        },
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
         Column(
@@ -237,18 +259,8 @@ fun MainScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            PageToggle(
-                currentPage = currentPage,
-                onPageChange = {
-                    currentPage = it
-                    if (captureState !is CaptureState.DictionarySuccess) {
-                        onCaptureStateChange(CaptureState.Idle)
-                    }
-                },
-            )
-
             when (currentPage) {
                 NotebookPage.NOTEBOOK -> NotebookPageContent(
                     pages = pages,
@@ -260,15 +272,6 @@ fun MainScreen(
                     onPageSelected = notebook::selectPage,
                     onCreatePage = notebook::createPage,
                     onDeletePage = notebook::deletePage,
-                    onScreenshotClick = { requestCapture(PendingCapture.SCREENSHOT) },
-                    onOcrClick = {
-                        if (cropEnabled) {
-                            requestCapture(PendingCapture.REGION_OCR)
-                        } else {
-                            requestCapture(PendingCapture.CROP)
-                        }
-                    },
-                    onEditRegionClick = { requestCapture(PendingCapture.CROP) },
                     onTextChange = notebook::updateText,
                     onDeleteEntry = notebook::deleteEntry,
                     modifier = Modifier.weight(1f),
@@ -302,13 +305,13 @@ fun MainScreen(
 }
 
 @Composable
-private fun PageToggle(
+private fun TopPageSwitch(
     currentPage: NotebookPage,
     onPageChange: (NotebookPage) -> Unit,
 ) {
     Row(
         modifier = Modifier
-            .fillMaxWidth()
+            .fillMaxWidth(0.82f)
             .clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant),
     ) {
@@ -342,12 +345,12 @@ private fun PageOption(
                 else MaterialTheme.colorScheme.surfaceVariant
             )
             .clickable { onClick() }
-            .padding(vertical = 12.dp),
+            .padding(vertical = 8.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = label,
-            fontSize = 15.sp,
+            fontSize = 13.sp,
             fontWeight = FontWeight.Bold,
             color = if (selected) MaterialTheme.colorScheme.onPrimary
                 else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -366,18 +369,13 @@ private fun NotebookPageContent(
     onPageSelected: (String) -> Unit,
     onCreatePage: (String) -> Unit,
     onDeletePage: (String) -> Unit,
-    onScreenshotClick: () -> Unit,
-    onOcrClick: () -> Unit,
-    onEditRegionClick: () -> Unit,
     onTextChange: (String, String) -> Unit,
     onDeleteEntry: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val isProcessing = state is CaptureState.Capturing || state is CaptureState.Processing
-
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         NotebookPageHeader(
             pages = pages,
@@ -386,25 +384,6 @@ private fun NotebookPageContent(
             onCreatePage = onCreatePage,
             onDeletePage = onDeletePage,
         )
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            ActionButton(
-                label = "Screenshot",
-                enabled = !isProcessing,
-                onClick = onScreenshotClick,
-                modifier = Modifier.weight(1f),
-            )
-            ActionButton(
-                label = if (cropEnabled) "Region OCR" else "Set Region",
-                enabled = !isProcessing,
-                onClick = onOcrClick,
-                onLongClick = onEditRegionClick,
-                modifier = Modifier.weight(1f),
-            )
-        }
 
         StatusLine(state = state)
 
@@ -459,7 +438,7 @@ private fun DictionaryPageContent(
             ),
         )
 
-        ActionButton(
+        CompactActionButton(
             label = "Look Up Text",
             enabled = true,
             onClick = onLookupClick,
@@ -502,7 +481,7 @@ private fun NotebookPageHeader(
     var newPageName by remember { mutableStateOf("") }
     val pageName = currentPage?.name ?: "No Page"
 
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -519,7 +498,7 @@ private fun NotebookPageHeader(
                         .clip(RoundedCornerShape(8.dp))
                         .background(MaterialTheme.colorScheme.primary)
                         .clickable { pageMenuExpanded = true }
-                        .padding(horizontal = 12.dp, vertical = 11.dp),
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
                 )
                 DropdownMenu(
                     expanded = pageMenuExpanded,
@@ -592,6 +571,82 @@ private fun NotebookPageHeader(
 }
 
 @Composable
+private fun CompactCaptureBar(
+    cropEnabled: Boolean,
+    isProcessing: Boolean,
+    onScreenshotClick: () -> Unit,
+    onOcrClick: () -> Unit,
+    onEditRegionClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        CompactActionButton(
+            label = "Shot",
+            enabled = !isProcessing,
+            onClick = onScreenshotClick,
+            modifier = Modifier.weight(1f),
+        )
+        CompactActionButton(
+            label = if (cropEnabled) "OCR" else "Set Region",
+            enabled = !isProcessing,
+            onClick = onOcrClick,
+            onLongClick = onEditRegionClick,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+@Composable
+private fun CompactActionButton(
+    label: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null,
+) {
+    val background = if (enabled) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+    val foreground = if (enabled) {
+        MaterialTheme.colorScheme.onPrimary
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    Box(
+        modifier = modifier
+            .height(42.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(background)
+            .pointerInput(enabled, onLongClick) {
+                detectTapGestures(
+                    onTap = {
+                        if (enabled) onClick()
+                    },
+                    onLongPress = {
+                        if (enabled) (onLongClick ?: onClick)()
+                    },
+                )
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = foreground,
+        )
+    }
+}
+
+@Composable
 private fun SmallTextButton(
     label: String,
     onClick: () -> Unit,
@@ -617,65 +672,6 @@ private fun formatBytes(bytes: Long): String {
     val mb = kb / 1024.0
     if (mb < 1024.0) return String.format("%.1f MB", mb)
     return String.format("%.1f GB", mb / 1024.0)
-}
-
-@Composable
-private fun ActionButton(
-    label: String,
-    enabled: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    onLongClick: (() -> Unit)? = null,
-) {
-    val background = if (enabled) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        MaterialTheme.colorScheme.surfaceVariant
-    }
-    val foreground = if (enabled) {
-        MaterialTheme.colorScheme.onPrimary
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    }
-
-    Box(
-        modifier = modifier
-            .height(52.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(background)
-            .pointerInput(enabled, onLongClick) {
-                detectTapGestures(
-                    onTap = {
-                        if (enabled) onClick()
-                    },
-                    onLongPress = {
-                        if (enabled) (onLongClick ?: onClick)()
-                    },
-                )
-            },
-        contentAlignment = Alignment.Center,
-    ) {
-        Row(
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (!enabled) {
-                CircularProgressIndicator(
-                    color = foreground,
-                    strokeWidth = 2.dp,
-                    modifier = Modifier
-                        .height(22.dp)
-                        .padding(end = 8.dp),
-                )
-            }
-            Text(
-                text = label,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                color = foreground,
-            )
-        }
-    }
 }
 
 @Composable
