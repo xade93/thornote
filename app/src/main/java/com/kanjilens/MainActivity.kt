@@ -12,10 +12,10 @@ import androidx.compose.runtime.setValue
 import com.kanjilens.analysis.DictionaryLookup
 import com.kanjilens.analysis.JapaneseTokenizer
 import com.kanjilens.capture.ScreenCaptureManager
+import com.kanjilens.data.NotebookRepository
 import com.kanjilens.data.models.AppSettings
 import com.kanjilens.data.models.CaptureState
 import com.kanjilens.ocr.TextRecognizer
-import com.kanjilens.translate.ScreenTranslator
 import com.kanjilens.ui.screens.CropScreen
 import com.kanjilens.ui.screens.HelpScreen
 import com.kanjilens.ui.screens.MainScreen
@@ -29,22 +29,21 @@ class MainActivity : ComponentActivity() {
     lateinit var tokenizer: JapaneseTokenizer
     lateinit var dictionary: DictionaryLookup
     lateinit var settings: AppSettings
-    lateinit var translator: ScreenTranslator
+    lateinit var notebook: NotebookRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         captureManager = ScreenCaptureManager(this)
         textRecognizer = TextRecognizer()
-        translator = ScreenTranslator(textRecognizer)
         tokenizer = JapaneseTokenizer()
         dictionary = DictionaryLookup(this)
         settings = AppSettings(this)
+        notebook = NotebookRepository(this)
         enableEdgeToEdge()
         setContent {
             KanjiLensTheme {
                 var currentScreen by remember { mutableStateOf("main") }
-                var dictionaryState by remember { mutableStateOf<CaptureState>(CaptureState.Idle) }
-                var translateState by remember { mutableStateOf<CaptureState>(CaptureState.Idle) }
+                var captureState by remember { mutableStateOf<CaptureState>(CaptureState.Idle) }
                 var cropScreenshot by remember { mutableStateOf<Bitmap?>(null) }
 
                 when (currentScreen) {
@@ -73,12 +72,10 @@ class MainActivity : ComponentActivity() {
                         textRecognizer = textRecognizer,
                         tokenizer = tokenizer,
                         dictionary = dictionary,
-                        translator = translator,
                         settings = settings,
-                        dictionaryState = dictionaryState,
-                        translateState = translateState,
-                        onDictionaryStateChange = { dictionaryState = it },
-                        onTranslateStateChange = { translateState = it },
+                        notebook = notebook,
+                        captureState = captureState,
+                        onCaptureStateChange = { captureState = it },
                         onSettingsClick = { currentScreen = "settings" },
                         onHelpClick = { currentScreen = "help" },
                         onCropClick = { bitmap ->

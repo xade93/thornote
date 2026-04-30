@@ -29,9 +29,7 @@ fun HelpScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = {
-                    Text("Help", fontWeight = FontWeight.Bold)
-                },
+                title = { Text("Help", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Text(
@@ -58,93 +56,41 @@ fun HelpScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            HelpSection("What is ThorLens?")
+            HelpSection("What is ThorNotes?")
             HelpBody(
-                "ThorLens translates foreign-language game screens in real time. " +
-                "Built for dual-screen devices like the Ayn Thor — run your game on the top screen " +
-                "and ThorLens on the bottom."
+                "ThorNotes is a notebook for information-heavy games, visual novels, novels, " +
+                    "and detective games on dual-screen Android devices. Keep the game on the top " +
+                    "screen and keep notes on the bottom screen."
             )
 
             HelpDivider()
 
-            HelpSection("Translate Mode")
+            HelpSection("Notebook")
+            HelpBody("Each visual novel, novel, or game can have its own notebook page. Use the page selector to switch, + to create, and the page menu to delete a page.")
+            HelpBody("Each page shows its current entry count and storage usage.")
+            HelpBody("Screenshot captures the whole top screen and adds it to the notebook stream.")
+            HelpBody("Region OCR captures the saved fixed region, reads Japanese text, and adds editable text to the stream. Long-press Region OCR to change the region.")
+            HelpBody("OCR entries can be corrected directly in the notebook when recognition is inaccurate.")
+            HelpBody("Swipe a screenshot or OCR entry sideways to delete it.")
+
+            HelpDivider()
+
+            HelpSection("Dictionary")
             HelpBody(
-                "Captures a screenshot and sends it to an AI model that translates " +
-                "and explains what's on screen. Works with any language — Japanese, Chinese, Korean, and more."
+                "The Dictionary page uses manual text input. Type or paste Japanese text, then look it up " +
+                    "to see readings and meanings from the bundled offline dictionary."
             )
-            HelpBody("Three translation styles (AI models only):")
-            HelpBullet("Auto", "Translates and explains what to do next (recommended)")
-            HelpBullet("Translate", "Just translates the text, no extra explanation")
-            HelpBullet("Explain", "Full translation with detailed guidance on how to progress")
 
             HelpDivider()
 
-            HelpSection("JP Dictionary Mode")
+            HelpSection("Capture Region")
             HelpBody(
-                "Offline Japanese word-by-word breakdown. Uses on-device OCR to read Japanese text, " +
-                "then looks up each word in a 212K-entry dictionary. Shows kanji, reading, meaning, " +
-                "and JLPT level. No internet required."
+                "On the Notebook page, tap Set Region before using Region OCR, or long-press Region OCR to change it later. " +
+                    "Screenshots always capture the whole screen; the fixed region is only used for notebook OCR."
             )
 
             HelpDivider()
 
-            HelpSection("AI Models")
-            HelpBullet("Offline", "On-device translation. No API key, no internet after first download (~30MB). Fast but basic quality.")
-            HelpBullet("Offline Auto", "Same as Offline, but captures and translates automatically every second. Only re-translates when the text on screen changes. Press Stop to go back to manual mode.")
-            HelpBullet("Gemini 2.5 Flash", "By Google. Free tier available — great to get started.")
-            HelpBullet("GPT-4o mini", "By OpenAI. Reliable and fast.")
-            Spacer(modifier = Modifier.height(4.dp))
-            HelpBody("Switch models from the top bar or in Settings. Offline is the default.")
-
-            HelpDivider()
-
-            HelpSection("Output Language")
-            HelpBody(
-                "Choose which language to translate into. Available in Settings. " +
-                "Supports English, Spanish, Portuguese, French, German, Italian, Chinese, Korean, and Russian."
-            )
-            HelpBody("For Offline mode, each language downloads a ~30MB model on first use.")
-
-            HelpDivider()
-
-            HelpSection("Custom Region")
-            HelpBody(
-                "By default, the entire screen is captured. Tap \"Full\" in the top bar to select " +
-                "a specific area (e.g. the dialogue box). Drag on the screenshot to draw the region, " +
-                "then tap \"Save Region\"."
-            )
-            HelpBody("Tap the \u2715 next to \"Region\" to go back to full screen capture.")
-
-            HelpDivider()
-
-            HelpSection("How to get an API key")
-
-            HelpSubsection("Google (Gemini Flash) — Free")
-            HelpBody("1. Go to aistudio.google.com")
-            HelpBody("2. Sign in with your Google account")
-            HelpBody("3. Click \"Get API Key\"")
-            HelpBody("4. Click \"Create API key\"")
-            HelpBody("5. Copy the key (starts with AIza...)")
-            HelpBody("6. Paste it in ThorLens Settings")
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            HelpSubsection("OpenAI (GPT-4o mini)")
-            HelpBody("1. Go to platform.openai.com")
-            HelpBody("2. Create an account or sign in")
-            HelpBody("3. Go to API Keys section")
-            HelpBody("4. Click \"Create new secret key\"")
-            HelpBody("5. Copy the key (starts with sk-...)")
-            HelpBody("6. Paste it in ThorLens Settings")
-
-            HelpDivider()
-
-            Text(
-                text = "Made by magiobus",
-                fontSize = 13.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp),
-            )
             Text(
                 text = "MIT License",
                 fontSize = 12.sp,
@@ -168,33 +114,12 @@ private fun HelpSection(title: String) {
 }
 
 @Composable
-private fun HelpSubsection(title: String) {
-    Text(
-        text = title,
-        fontSize = 14.sp,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onSurface,
-    )
-}
-
-@Composable
 private fun HelpBody(text: String) {
     Text(
         text = text,
         fontSize = 14.sp,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         lineHeight = 20.sp,
-    )
-}
-
-@Composable
-private fun HelpBullet(label: String, description: String) {
-    Text(
-        text = "\u2022 $label — $description",
-        fontSize = 14.sp,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        lineHeight = 20.sp,
-        modifier = Modifier.padding(start = 8.dp),
     )
 }
 

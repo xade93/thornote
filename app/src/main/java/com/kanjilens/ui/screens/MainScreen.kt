@@ -3,25 +3,33 @@ package com.kanjilens.ui.screens
 import android.app.Activity
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -36,6 +44,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -46,20 +58,30 @@ import com.kanjilens.analysis.DictionaryLookup
 import com.kanjilens.analysis.JapaneseTokenizer
 import com.kanjilens.capture.ScreenCaptureManager
 import com.kanjilens.capture.ScreenCaptureService
+import com.kanjilens.data.NotebookRepository
 import com.kanjilens.data.models.AnalysisResult
 import com.kanjilens.data.models.AppSettings
 import com.kanjilens.data.models.CaptureState
-import com.kanjilens.data.models.TranslationResult
+import com.kanjilens.data.models.NotebookEntry
+import com.kanjilens.data.models.NotebookEntryType
+import com.kanjilens.data.models.NotebookPageInfo
 import com.kanjilens.ocr.TextRecognizer
-import com.kanjilens.translate.ScreenTranslator
-import com.kanjilens.translate.TranslateResult
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
-import com.kanjilens.ui.components.CaptureButton
-import com.kanjilens.ui.components.TranslationResultView
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
+import com.kanjilens.ui.components.DictionaryResultView
 import kotlinx.coroutines.launch
+import java.text.DateFormat
+import java.util.Date
+
+private enum class NotebookPage {
+    NOTEBOOK,
+    DICTIONARY,
+}
+
+private enum class PendingCapture {
+    NONE,
+    SCREENSHOT,
+    REGION_OCR,
+    CROP,
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -68,12 +90,10 @@ fun MainScreen(
     textRecognizer: TextRecognizer,
     tokenizer: JapaneseTokenizer,
     dictionary: DictionaryLookup,
-    translator: ScreenTranslator,
     settings: AppSettings,
-    dictionaryState: CaptureState,
-    translateState: CaptureState,
-    onDictionaryStateChange: (CaptureState) -> Unit,
-    onTranslateStateChange: (CaptureState) -> Unit,
+    notebook: NotebookRepository,
+    captureState: CaptureState,
+    onCaptureStateChange: (CaptureState) -> Unit,
     onSettingsClick: () -> Unit,
     onHelpClick: () -> Unit,
     onCropClick: (Bitmap) -> Unit = {},
@@ -81,44 +101,16 @@ fun MainScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val textSize by settings.textSize.collectAsState()
-    val appMode by settings.appMode.collectAsState()
-    val translateStyle by settings.translateStyle.collectAsState()
-    val aiModel by settings.aiModel.collectAsState()
-    val openaiKey by settings.openaiApiKey.collectAsState()
-    val geminiKey by settings.geminiApiKey.collectAsState()
-    val outputLanguage by settings.outputLanguage.collectAsState()
     val cropEnabled by settings.cropEnabled.collectAsState()
-    val apiKey = when (aiModel) {
-        AppSettings.MODEL_GEMINI_FLASH -> geminiKey
-        AppSettings.MODEL_MLKIT_OFFLINE, AppSettings.MODEL_MLKIT_OFFLINE_AUTO -> ""
-        else -> openaiKey
-    }
+    val pages by notebook.pages.collectAsState()
+    val currentPageId by notebook.currentPageId.collectAsState()
+    val entries by notebook.entries.collectAsState()
+    val currentNotebookPage = pages.firstOrNull { it.id == currentPageId }
 
-    val isAutoMode = aiModel == AppSettings.MODEL_MLKIT_OFFLINE_AUTO
-    var autoJob by remember { mutableStateOf<Job?>(null) }
-    var lastOcrText by remember { mutableStateOf<String?>(null) }
-
-    fun isSignificantChange(oldText: String, newText: String): Boolean {
-        if (oldText.isEmpty()) return true
-        val diff = kotlin.math.abs(oldText.length - newText.length)
-        if (diff > 3) return true
-        // Character-level comparison: if more than 20% different, it's significant
-        val maxLen = maxOf(oldText.length, newText.length)
-        if (maxLen == 0) return false
-        var matches = 0
-        for (i in 0 until minOf(oldText.length, newText.length)) {
-            if (oldText[i] == newText[i]) matches++
-        }
-        val similarity = matches.toFloat() / maxLen
-        return similarity < 0.8f
-    }
-
-    fun stopAutoMode() {
-        autoJob?.cancel()
-        autoJob = null
-        lastOcrText = null
-        settings.setAiModel(AppSettings.MODEL_MLKIT_OFFLINE)
-    }
+    var currentPage by remember { mutableStateOf(NotebookPage.NOTEBOOK) }
+    var dictionaryResult by remember { mutableStateOf<AnalysisResult?>(null) }
+    var dictionaryInput by remember { mutableStateOf("") }
+    var pendingCapture by remember { mutableStateOf(PendingCapture.NONE) }
 
     fun cropBitmap(bitmap: Bitmap): Bitmap {
         if (!cropEnabled) return bitmap
@@ -130,204 +122,80 @@ fun MainScreen(
         return Bitmap.createBitmap(bitmap, x, y, w, h)
     }
 
-    val captureState = if (appMode == AppSettings.MODE_TRANSLATE) translateState else dictionaryState
-    val onCaptureStateChange: (CaptureState) -> Unit = if (appMode == AppSettings.MODE_TRANSLATE) {
-        onTranslateStateChange
-    } else {
-        onDictionaryStateChange
+    fun captureScreenshotEntry() {
+        scope.launch {
+            onCaptureStateChange(CaptureState.Capturing)
+            val bitmap = captureManager.captureScreen()
+            if (bitmap == null) {
+                onCaptureStateChange(CaptureState.Error("Failed to capture screen"))
+                return@launch
+            }
+            notebook.addScreenshot(bitmap)
+            onCaptureStateChange(CaptureState.Idle)
+        }
     }
 
-    fun doDictionaryCapture() {
+    fun captureRegionOcrEntry() {
         scope.launch {
-            onDictionaryStateChange(CaptureState.Capturing)
+            onCaptureStateChange(CaptureState.Capturing)
             val fullBitmap = captureManager.captureScreen()
             if (fullBitmap == null) {
-                onDictionaryStateChange(CaptureState.Error("Failed to capture screen"))
+                onCaptureStateChange(CaptureState.Error("Failed to capture screen"))
                 return@launch
             }
-
-            val bitmap = cropBitmap(fullBitmap)
-            onDictionaryStateChange(CaptureState.Processing)
-
-            val recognizedText = textRecognizer.recognizeText(bitmap)
-            if (recognizedText != null) {
-                val tokens = tokenizer.tokenize(recognizedText)
-                val words = dictionary.lookupTokens(tokens)
-
-                onDictionaryStateChange(CaptureState.DictionarySuccess(
-                    AnalysisResult(
-                        originalText = recognizedText,
-                        words = words,
-                    )
-                ))
-            } else {
-                onDictionaryStateChange(CaptureState.Error("No Japanese text found in screenshot"))
+            onCaptureStateChange(CaptureState.Processing)
+            val text = textRecognizer.recognizeText(cropBitmap(fullBitmap))
+            if (text.isNullOrBlank()) {
+                onCaptureStateChange(CaptureState.Error("No Japanese text found in selected region"))
+                return@launch
             }
+            notebook.addOcrText(text)
+            onCaptureStateChange(CaptureState.Idle)
         }
     }
 
-    fun doTranslateCapture() {
+    fun openCropSelector() {
         scope.launch {
-            if (aiModel != AppSettings.MODEL_MLKIT_OFFLINE && apiKey.isBlank()) {
-                onTranslateStateChange(CaptureState.Error("Add your API key in Settings"))
-                return@launch
-            }
-
-            onTranslateStateChange(CaptureState.Capturing)
-            val fullBitmap = captureManager.captureScreen()
-            if (fullBitmap == null) {
-                onTranslateStateChange(CaptureState.Error("Failed to capture screen"))
-                return@launch
-            }
-
-            val bitmap = cropBitmap(fullBitmap)
-            onTranslateStateChange(CaptureState.Processing)
-
-            when (val result = translator.translateScreen(
-                bitmap, apiKey, translateStyle, aiModel, outputLanguage,
-                onDownloading = { onTranslateStateChange(CaptureState.DownloadingModel) },
-            )) {
-                is TranslateResult.Success -> {
-                    onTranslateStateChange(CaptureState.TranslateSuccess(
-                        TranslationResult(translation = result.text)
-                    ))
-                }
-                is TranslateResult.Error -> {
-                    onTranslateStateChange(CaptureState.Error(result.message))
-                }
-            }
+            val bitmap = captureManager.captureScreen()
+            if (bitmap != null) onCropClick(bitmap)
         }
     }
 
-    fun doCapture() {
-        if (appMode == AppSettings.MODE_TRANSLATE) {
-            doTranslateCapture()
-        } else {
-            doDictionaryCapture()
+    fun runPendingCapture() {
+        when (pendingCapture) {
+            PendingCapture.SCREENSHOT -> captureScreenshotEntry()
+            PendingCapture.REGION_OCR -> captureRegionOcrEntry()
+            PendingCapture.CROP -> openCropSelector()
+            PendingCapture.NONE -> Unit
         }
+        pendingCapture = PendingCapture.NONE
     }
-
-    fun doAutoTranslateCycle() {
-        scope.launch {
-            val fullBitmap = captureManager.captureScreen() ?: return@launch
-
-            val bitmap = cropBitmap(fullBitmap)
-
-            // Get OCR text first for dedup
-            val blocks = textRecognizer.recognizeTextBlocks(bitmap)
-            if (blocks.isNullOrEmpty()) return@launch
-
-            val currentText = blocks.joinToString("")
-                .filter { c -> c.code > 0x3000 } // Keep only CJK chars for dedup
-
-            if (currentText.isEmpty()) return@launch
-
-            if (!isSignificantChange(lastOcrText ?: "", currentText)) {
-                return@launch // Text hasn't changed, skip
-            }
-            lastOcrText = currentText
-
-            onTranslateStateChange(CaptureState.Processing)
-
-            when (val result = translator.translateScreen(
-                bitmap, "", AppSettings.TRANSLATE_STYLE_AUTO, AppSettings.MODEL_MLKIT_OFFLINE, outputLanguage,
-                onDownloading = { onTranslateStateChange(CaptureState.DownloadingModel) },
-            )) {
-                is TranslateResult.Success -> {
-                    onTranslateStateChange(CaptureState.TranslateSuccess(
-                        TranslationResult(translation = result.text)
-                    ))
-                }
-                is TranslateResult.Error -> {
-                    onTranslateStateChange(CaptureState.Error(result.message))
-                }
-            }
-        }
-    }
-
-    fun startAutoMode() {
-        if (autoJob?.isActive == true) return
-        lastOcrText = null
-        autoJob = scope.launch {
-            while (true) {
-                if (captureManager.isReady) {
-                    doAutoTranslateCycle()
-                }
-                delay(1000L)
-            }
-        }
-    }
-
-    var pendingAutoAfterPermission by remember { mutableStateOf(false) }
-    var pendingCropAfterPermission by remember { mutableStateOf(false) }
 
     val projectionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK && result.data != null) {
             ScreenCaptureService.captureManager = captureManager
-
             val serviceIntent = Intent(context, ScreenCaptureService::class.java).apply {
                 putExtra(ScreenCaptureService.EXTRA_RESULT_CODE, result.resultCode)
                 putExtra(ScreenCaptureService.EXTRA_RESULT_DATA, result.data)
             }
             ContextCompat.startForegroundService(context, serviceIntent)
-
-            if (pendingCropAfterPermission) {
-                pendingCropAfterPermission = false
-                captureManager.awaitProjectionReady {
-                    scope.launch {
-                        val bmp = captureManager.captureScreen()
-                        if (bmp != null) onCropClick(bmp)
-                    }
-                }
-            } else if (pendingAutoAfterPermission) {
-                pendingAutoAfterPermission = false
-                captureManager.awaitProjectionReady {
-                    startAutoMode()
-                }
-            } else {
-                onCaptureStateChange(CaptureState.Capturing)
-                captureManager.awaitProjectionReady {
-                    doCapture()
-                }
-            }
+            captureManager.awaitProjectionReady { runPendingCapture() }
         } else {
-            pendingCropAfterPermission = false
-            pendingAutoAfterPermission = false
+            pendingCapture = PendingCapture.NONE
             onCaptureStateChange(CaptureState.Error("Permission denied"))
         }
     }
 
-    fun onCaptureClick() {
+    fun requestCapture(action: PendingCapture) {
+        pendingCapture = action
         if (captureManager.isReady) {
-            doCapture()
+            runPendingCapture()
         } else {
-            pendingCropAfterPermission = false
             val intent = captureManager.projectionManager.createScreenCaptureIntent()
             projectionLauncher.launch(intent)
         }
-    }
-
-    fun onCropRegionClick() {
-        if (captureManager.isReady) {
-            scope.launch {
-                val bmp = captureManager.captureScreen()
-                if (bmp != null) onCropClick(bmp)
-            }
-        } else {
-            pendingCropAfterPermission = true
-            val intent = captureManager.projectionManager.createScreenCaptureIntent()
-            projectionLauncher.launch(intent)
-        }
-    }
-
-    var modelMenuExpanded by remember { mutableStateOf(false) }
-    val modelLabel = when (aiModel) {
-        AppSettings.MODEL_GEMINI_FLASH -> "Gemini"
-        AppSettings.MODEL_MLKIT_OFFLINE -> "Offline"
-        AppSettings.MODEL_MLKIT_OFFLINE_AUTO -> "Auto"
-        else -> "GPT-4o"
     }
 
     Scaffold(
@@ -335,97 +203,11 @@ fun MainScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "ThorLens",
+                        text = "ThorNotes",
                         fontWeight = FontWeight.Bold,
                     )
                 },
                 actions = {
-                    // Region chip
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = if (cropEnabled) "Region" else "Full",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (cropEnabled) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant)
-                                .clickable { onCropRegionClick() }
-                                .padding(horizontal = 8.dp, vertical = 6.dp),
-                        )
-                        if (cropEnabled) {
-                            Text(
-                                text = "\u2715",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.error,
-                                modifier = Modifier
-                                    .clickable { settings.clearCropRegion() }
-                                    .padding(start = 2.dp, end = 4.dp),
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.padding(horizontal = 4.dp))
-                    // Model chip
-                    Box {
-                        Text(
-                            text = modelLabel,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant)
-                                .clickable { modelMenuExpanded = true }
-                                .padding(horizontal = 10.dp, vertical = 6.dp),
-                        )
-                        DropdownMenu(
-                            expanded = modelMenuExpanded,
-                            onDismissRequest = { modelMenuExpanded = false },
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("Offline") },
-                                onClick = {
-                                    stopAutoMode()
-                                    settings.setAiModel(AppSettings.MODEL_MLKIT_OFFLINE)
-                                    modelMenuExpanded = false
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Offline Auto") },
-                                onClick = {
-                                    settings.setAiModel(AppSettings.MODEL_MLKIT_OFFLINE_AUTO)
-                                    modelMenuExpanded = false
-                                    if (captureManager.isReady) {
-                                        startAutoMode()
-                                    } else {
-                                        pendingAutoAfterPermission = true
-                                        val intent = captureManager.projectionManager.createScreenCaptureIntent()
-                                        projectionLauncher.launch(intent)
-                                    }
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Gemini Flash") },
-                                onClick = {
-                                    stopAutoMode()
-                                    settings.setAiModel(AppSettings.MODEL_GEMINI_FLASH)
-                                    modelMenuExpanded = false
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("GPT-4o mini") },
-                                onClick = {
-                                    stopAutoMode()
-                                    settings.setAiModel(AppSettings.MODEL_GPT4O_MINI)
-                                    modelMenuExpanded = false
-                                },
-                            )
-                        }
-                    }
                     IconButton(onClick = onHelpClick) {
                         Text(
                             text = "?",
@@ -455,159 +237,74 @@ fun MainScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.SpaceBetween,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            // Mode toggle
-            ModeToggle(
-                currentMode = appMode,
-                onModeChange = { settings.setAppMode(it) },
+            PageToggle(
+                currentPage = currentPage,
+                onPageChange = {
+                    currentPage = it
+                    if (captureState !is CaptureState.DictionarySuccess) {
+                        onCaptureStateChange(CaptureState.Idle)
+                    }
+                },
             )
 
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(top = 8.dp)
-                    .verticalScroll(rememberScrollState()),
-                contentAlignment = Alignment.Center,
-            ) {
-                when (val state = captureState) {
-                    is CaptureState.Idle -> {
-                        val hint = if (appMode == AppSettings.MODE_TRANSLATE) {
-                            "Press the button to capture\nand translate the screen"
+            when (currentPage) {
+                NotebookPage.NOTEBOOK -> NotebookPageContent(
+                    pages = pages,
+                    currentPage = currentNotebookPage,
+                    entries = entries,
+                    state = captureState,
+                    cropEnabled = cropEnabled,
+                    textSize = textSize,
+                    onPageSelected = notebook::selectPage,
+                    onCreatePage = notebook::createPage,
+                    onDeletePage = notebook::deletePage,
+                    onScreenshotClick = { requestCapture(PendingCapture.SCREENSHOT) },
+                    onOcrClick = {
+                        if (cropEnabled) {
+                            requestCapture(PendingCapture.REGION_OCR)
                         } else {
-                            "Press the button to capture\nand look up words"
+                            requestCapture(PendingCapture.CROP)
                         }
-                        Text(
-                            text = hint,
-                            textAlign = TextAlign.Center,
-                            fontSize = 16.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    is CaptureState.Capturing -> {
-                        Text(
-                            text = "Capturing...",
-                            fontSize = 16.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    is CaptureState.DownloadingModel -> {
-                        val langName = AppSettings.languageDisplayName(outputLanguage)
-                        Text(
-                            text = "Downloading $langName model...",
-                            fontSize = 16.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    is CaptureState.Processing -> {
-                        val langName = AppSettings.languageDisplayName(outputLanguage)
-                        val label = if (appMode == AppSettings.MODE_TRANSLATE) {
-                            if (aiModel == AppSettings.MODEL_MLKIT_OFFLINE || aiModel == AppSettings.MODEL_MLKIT_OFFLINE_AUTO) {
-                                "Translating to $langName..."
-                            } else {
-                                val modelName = when (aiModel) {
-                                    AppSettings.MODEL_GEMINI_FLASH -> "Gemini Flash"
-                                    else -> "GPT-4o mini"
-                                }
-                                val styleName = when (translateStyle) {
-                                    AppSettings.TRANSLATE_STYLE_TRANSLATE_ONLY -> "translate"
-                                    AppSettings.TRANSLATE_STYLE_TRANSLATE_AND_EXPLAIN -> "explain"
-                                    else -> "auto"
-                                }
-                                "Translating to $langName using $modelName ($styleName)..."
-                            }
+                    },
+                    onEditRegionClick = { requestCapture(PendingCapture.CROP) },
+                    onTextChange = notebook::updateText,
+                    onDeleteEntry = notebook::deleteEntry,
+                    modifier = Modifier.weight(1f),
+                )
+                NotebookPage.DICTIONARY -> DictionaryPageContent(
+                    input = dictionaryInput,
+                    result = dictionaryResult,
+                    textSize = textSize,
+                    onInputChange = {
+                        dictionaryInput = it
+                        if (it.isBlank()) {
+                            dictionaryResult = null
+                            onCaptureStateChange(CaptureState.Idle)
+                        }
+                    },
+                    onLookupClick = {
+                        val text = dictionaryInput.trim()
+                        if (text.isBlank()) {
+                            onCaptureStateChange(CaptureState.Error("Enter text to look up"))
                         } else {
-                            "Reading text..."
+                            val words = dictionary.lookupTokens(tokenizer.tokenize(text))
+                            dictionaryResult = AnalysisResult(originalText = text, words = words)
+                            onCaptureStateChange(CaptureState.Idle)
                         }
-                        Text(
-                            text = label,
-                            fontSize = 16.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    is CaptureState.DictionarySuccess -> {
-                        TranslationResultView(
-                            result = state.result,
-                            textSize = textSize,
-                        )
-                    }
-                    is CaptureState.TranslateSuccess -> {
-                        val translateFontSize = when (textSize) {
-                            AppSettings.TEXT_SIZE_SMALL -> 14.sp
-                            AppSettings.TEXT_SIZE_LARGE -> 20.sp
-                            else -> 16.sp
-                        }
-                        if (aiModel == AppSettings.MODEL_MLKIT_OFFLINE || aiModel == AppSettings.MODEL_MLKIT_OFFLINE_AUTO) {
-                            // Offline: show blocks with JP original + EN translation
-                            Column {
-                                val lines = state.result.translation.split("\n")
-                                var i = 0
-                                while (i < lines.size) {
-                                    val line = lines[i].trim()
-                                    if (line.isEmpty()) {
-                                        i++
-                                        continue
-                                    }
-                                    // JP original line
-                                    Text(
-                                        text = line,
-                                        fontSize = translateFontSize,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        lineHeight = translateFontSize * 1.4,
-                                    )
-                                    // EN translation line (next line if exists)
-                                    if (i + 1 < lines.size && lines[i + 1].trim().isNotEmpty()) {
-                                        Text(
-                                            text = lines[i + 1].trim(),
-                                            fontSize = translateFontSize,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.primary,
-                                            lineHeight = translateFontSize * 1.4,
-                                        )
-                                        i += 2
-                                    } else {
-                                        i++
-                                    }
-                                    Spacer(modifier = Modifier.height(12.dp))
-                                }
-                            }
-                        } else {
-                            Text(
-                                text = state.result.translation,
-                                fontSize = translateFontSize,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                lineHeight = translateFontSize * 1.5,
-                            )
-                        }
-                    }
-                    is CaptureState.Error -> {
-                        Text(
-                            text = state.message,
-                            fontSize = 16.sp,
-                            color = MaterialTheme.colorScheme.error,
-                            textAlign = TextAlign.Center,
-                        )
-                    }
-                }
+                    },
+                    modifier = Modifier.weight(1f),
+                )
             }
-
-            CaptureButton(
-                isProcessing = captureState is CaptureState.Capturing
-                    || captureState is CaptureState.DownloadingModel
-                    || captureState is CaptureState.Processing,
-                onClick = { onCaptureClick() },
-                modifier = Modifier.padding(bottom = 16.dp),
-                isAutoMode = isAutoMode,
-                onStopAuto = { stopAutoMode() },
-            )
         }
     }
 }
 
 @Composable
-private fun ModeToggle(
-    currentMode: Int,
-    onModeChange: (Int) -> Unit,
+private fun PageToggle(
+    currentPage: NotebookPage,
+    onPageChange: (NotebookPage) -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -615,43 +312,35 @@ private fun ModeToggle(
             .clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant),
     ) {
-        ModeOption(
-            label = "Translate",
-            selected = currentMode == AppSettings.MODE_TRANSLATE,
-            onClick = { onModeChange(AppSettings.MODE_TRANSLATE) },
+        PageOption(
+            label = "Notebook",
+            selected = currentPage == NotebookPage.NOTEBOOK,
+            onClick = { onPageChange(NotebookPage.NOTEBOOK) },
             modifier = Modifier.weight(1f),
         )
-        ModeOption(
-            label = "JP Dictionary",
-            selected = currentMode == AppSettings.MODE_DICTIONARY,
-            onClick = { onModeChange(AppSettings.MODE_DICTIONARY) },
+        PageOption(
+            label = "Dictionary",
+            selected = currentPage == NotebookPage.DICTIONARY,
+            onClick = { onPageChange(NotebookPage.DICTIONARY) },
             modifier = Modifier.weight(1f),
         )
     }
 }
 
 @Composable
-private fun ModeOption(
+private fun PageOption(
     label: String,
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val bgColor = if (selected) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        MaterialTheme.colorScheme.surfaceVariant
-    }
-    val textColor = if (selected) {
-        MaterialTheme.colorScheme.onPrimary
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    }
-
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
-            .background(bgColor)
+            .background(
+                if (selected) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.surfaceVariant
+            )
             .clickable { onClick() }
             .padding(vertical = 12.dp),
         contentAlignment = Alignment.Center,
@@ -660,7 +349,457 @@ private fun ModeOption(
             text = label,
             fontSize = 15.sp,
             fontWeight = FontWeight.Bold,
-            color = textColor,
+            color = if (selected) MaterialTheme.colorScheme.onPrimary
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun NotebookPageContent(
+    pages: List<NotebookPageInfo>,
+    currentPage: NotebookPageInfo?,
+    entries: List<NotebookEntry>,
+    state: CaptureState,
+    cropEnabled: Boolean,
+    textSize: Int,
+    onPageSelected: (String) -> Unit,
+    onCreatePage: (String) -> Unit,
+    onDeletePage: (String) -> Unit,
+    onScreenshotClick: () -> Unit,
+    onOcrClick: () -> Unit,
+    onEditRegionClick: () -> Unit,
+    onTextChange: (String, String) -> Unit,
+    onDeleteEntry: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val isProcessing = state is CaptureState.Capturing || state is CaptureState.Processing
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        NotebookPageHeader(
+            pages = pages,
+            currentPage = currentPage,
+            onPageSelected = onPageSelected,
+            onCreatePage = onCreatePage,
+            onDeletePage = onDeletePage,
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            ActionButton(
+                label = "Screenshot",
+                enabled = !isProcessing,
+                onClick = onScreenshotClick,
+                modifier = Modifier.weight(1f),
+            )
+            ActionButton(
+                label = if (cropEnabled) "Region OCR" else "Set Region",
+                enabled = !isProcessing,
+                onClick = onOcrClick,
+                onLongClick = onEditRegionClick,
+                modifier = Modifier.weight(1f),
+            )
+        }
+
+        StatusLine(state = state)
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            if (entries.isEmpty()) {
+                EmptyState("Capture screenshots or OCR text to build this notebook.")
+            } else {
+                entries.forEach { entry ->
+                    NotebookEntryView(
+                        entry = entry,
+                        textSize = textSize,
+                        onTextChange = onTextChange,
+                        onDelete = onDeleteEntry,
+                    )
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun DictionaryPageContent(
+    input: String,
+    result: AnalysisResult?,
+    textSize: Int,
+    onInputChange: (String) -> Unit,
+    onLookupClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        OutlinedTextField(
+            value = input,
+            onValueChange = onInputChange,
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 3,
+            placeholder = { Text("Enter Japanese text") },
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+            ),
+        )
+
+        ActionButton(
+            label = "Look Up Text",
+            enabled = true,
+            onClick = onLookupClick,
+            modifier = Modifier.fillMaxWidth(),
+        )
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .verticalScroll(rememberScrollState()),
+        ) {
+            if (result == null) {
+                EmptyState("Type words or a sentence to look up readings and meanings.")
+            } else {
+                Text(
+                    text = result.originalText,
+                    fontSize = 15.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 21.sp,
+                    modifier = Modifier.padding(bottom = 12.dp),
+                )
+                DictionaryResultView(result = result, textSize = textSize)
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun NotebookPageHeader(
+    pages: List<NotebookPageInfo>,
+    currentPage: NotebookPageInfo?,
+    onPageSelected: (String) -> Unit,
+    onCreatePage: (String) -> Unit,
+    onDeletePage: (String) -> Unit,
+) {
+    var pageMenuExpanded by remember { mutableStateOf(false) }
+    var creatingPage by remember { mutableStateOf(false) }
+    var newPageName by remember { mutableStateOf("") }
+    val pageName = currentPage?.name ?: "No Page"
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = pageName,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.primary)
+                        .clickable { pageMenuExpanded = true }
+                        .padding(horizontal = 12.dp, vertical = 11.dp),
+                )
+                DropdownMenu(
+                    expanded = pageMenuExpanded,
+                    onDismissRequest = { pageMenuExpanded = false },
+                ) {
+                    pages.forEach { page ->
+                        DropdownMenuItem(
+                            text = { Text("${page.name} (${formatBytes(page.sizeBytes)})") },
+                            onClick = {
+                                onPageSelected(page.id)
+                                pageMenuExpanded = false
+                            },
+                        )
+                    }
+                    if (currentPage != null) {
+                        DropdownMenuItem(
+                            text = { Text("Delete current page") },
+                            onClick = {
+                                onDeletePage(currentPage.id)
+                                pageMenuExpanded = false
+                            },
+                        )
+                    }
+                }
+            }
+            SmallTextButton(
+                label = "+",
+                onClick = { creatingPage = !creatingPage },
+            )
+        }
+
+        currentPage?.let { page ->
+            Text(
+                text = "${page.entryCount} entries - ${formatBytes(page.sizeBytes)}",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        if (creatingPage) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                OutlinedTextField(
+                    value = newPageName,
+                    onValueChange = { newPageName = it },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    placeholder = { Text("Novel / game name") },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                    ),
+                )
+                SmallTextButton(
+                    label = "Create",
+                    onClick = {
+                        onCreatePage(newPageName)
+                        newPageName = ""
+                        creatingPage = false
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SmallTextButton(
+    label: String,
+    onClick: () -> Unit,
+    color: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.primary,
+) {
+    Text(
+        text = label,
+        fontSize = 13.sp,
+        fontWeight = FontWeight.Bold,
+        color = color,
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .clickable { onClick() }
+            .padding(horizontal = 10.dp, vertical = 9.dp),
+    )
+}
+
+private fun formatBytes(bytes: Long): String {
+    if (bytes < 1024L) return "$bytes B"
+    val kb = bytes / 1024.0
+    if (kb < 1024.0) return String.format("%.1f KB", kb)
+    val mb = kb / 1024.0
+    if (mb < 1024.0) return String.format("%.1f MB", mb)
+    return String.format("%.1f GB", mb / 1024.0)
+}
+
+@Composable
+private fun ActionButton(
+    label: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null,
+) {
+    val background = if (enabled) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+    val foreground = if (enabled) {
+        MaterialTheme.colorScheme.onPrimary
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    Box(
+        modifier = modifier
+            .height(52.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(background)
+            .pointerInput(enabled, onLongClick) {
+                detectTapGestures(
+                    onTap = {
+                        if (enabled) onClick()
+                    },
+                    onLongPress = {
+                        if (enabled) (onLongClick ?: onClick)()
+                    },
+                )
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (!enabled) {
+                CircularProgressIndicator(
+                    color = foreground,
+                    strokeWidth = 2.dp,
+                    modifier = Modifier
+                        .height(22.dp)
+                        .padding(end = 8.dp),
+                )
+            }
+            Text(
+                text = label,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = foreground,
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatusLine(state: CaptureState) {
+    val message = when (state) {
+        CaptureState.Capturing -> "Capturing..."
+        CaptureState.Processing -> "Reading text..."
+        is CaptureState.Error -> state.message
+        else -> ""
+    }
+    if (message.isNotEmpty()) {
+        Text(
+            text = message,
+            fontSize = 14.sp,
+            color = if (state is CaptureState.Error) MaterialTheme.colorScheme.error
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+@Composable
+private fun NotebookEntryView(
+    entry: NotebookEntry,
+    textSize: Int,
+    onTextChange: (String, String) -> Unit,
+    onDelete: (String) -> Unit,
+) {
+    val time = remember(entry.createdAt) {
+        DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(entry.createdAt))
+    }
+    val bodySize = when (textSize) {
+        AppSettings.TEXT_SIZE_SMALL -> 14.sp
+        AppSettings.TEXT_SIZE_LARGE -> 20.sp
+        else -> 16.sp
+    }
+    var dragAmount by remember(entry.id) { mutableStateOf(0f) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .pointerInput(entry.id) {
+                detectHorizontalDragGestures(
+                    onHorizontalDrag = { change, drag ->
+                        change.consume()
+                        dragAmount += drag
+                    },
+                    onDragEnd = {
+                        if (kotlin.math.abs(dragAmount) > 160f) {
+                            onDelete(entry.id)
+                        }
+                        dragAmount = 0f
+                    },
+                    onDragCancel = { dragAmount = 0f },
+                )
+            }
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = if (entry.type == NotebookEntryType.SCREENSHOT) "Screenshot - $time" else "OCR Text - $time",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+        )
+
+        when (entry.type) {
+            NotebookEntryType.SCREENSHOT -> {
+                val bitmap = remember(entry.imagePath) {
+                    entry.imagePath?.let { BitmapFactory.decodeFile(it) }
+                }
+                if (bitmap != null) {
+                    Image(
+                        bitmap = bitmap.asImageBitmap(),
+                        contentDescription = "Captured screenshot",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(6.dp)),
+                        contentScale = ContentScale.FillWidth,
+                    )
+                } else {
+                    Text(
+                        text = "Screenshot file is missing",
+                        fontSize = bodySize,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+            NotebookEntryType.OCR_TEXT -> {
+                OutlinedTextField(
+                    value = entry.text,
+                    onValueChange = { onTextChange(entry.id, it) },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2,
+                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = bodySize),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                    ),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyState(text: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 64.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = text,
+            fontSize = 15.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            lineHeight = 21.sp,
         )
     }
 }

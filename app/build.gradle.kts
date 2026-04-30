@@ -70,12 +70,6 @@ dependencies {
     // ML Kit - Japanese text recognition
     implementation("com.google.mlkit:text-recognition-japanese:16.0.1")
 
-    // ML Kit - On-device translation
-    implementation("com.google.mlkit:translate:17.0.3")
-
-    // Coroutines support for Play Services (ML Kit .await())
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")
-
     // Kuromoji - Japanese tokenizer
     implementation("com.atilika.kuromoji:kuromoji-ipadic:0.9.0")
 
@@ -86,9 +80,6 @@ dependencies {
     // implementation("androidx.room:room-runtime:2.6.1")
     // implementation("androidx.room:room-ktx:2.6.1")
     // ksp("androidx.room:room-compiler:2.6.1")
-
-    // OkHttp - OpenAI API
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     // Debug
     debugImplementation("androidx.compose.ui:ui-tooling")

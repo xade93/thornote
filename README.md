@@ -1,113 +1,78 @@
-# ThorLens
+# ThorNotes
 
-Android app for translating and understanding foreign-language game screens in real time. Built for dual-screen devices like the [Ayn Thor](https://www.ayntec.com/), where the game runs on the top screen and ThorLens runs on the bottom.
+Notebook app for information-heavy games, visual novels, novels, and detective games on dual-screen Android handhelds like the Ayn Thor. The game runs on the top screen; ThorNotes runs on the bottom screen.
 
-## What it does
+## What It Does
 
-**Translate mode** (primary) — Captures a screenshot of the top screen and translates it. Works with any language (Japanese, Chinese, Korean, etc). Three translation styles available with AI models:
-- **Auto** (default): Translates and explains what to do next
-- **Translate**: Just translates the text, no extra explanation
-- **Explain**: Full translation with detailed guidance on how to progress
+**Notebook page** records a browsable stream of captured context:
+- Create a separate page for each visual novel, novel, or game.
+- Switch pages from the page selector.
+- View each page's entry count and storage usage.
+- Delete a page from the page menu when you are done with it.
+- **Screenshot** captures the whole screen and stores it in the notebook.
+- **Region OCR** captures the saved fixed region, runs OCR, and stores the recognized text as an editable notebook entry.
+- OCR text entries can be corrected in place when recognition is inaccurate.
+- Swipe a screenshot or OCR entry sideways to delete it.
 
-**JP Dictionary mode** — Offline Japanese word-by-word breakdown. Captures text via OCR, tokenizes it, and looks up each word in a 212K-entry dictionary (JMDict). Shows kanji, reading, meaning, and JLPT level. No internet required.
+**Dictionary page** keeps Japanese word lookup available for moments when a word is hard to remember. Type or paste Japanese text manually, then ThorNotes tokenizes it and shows readings and dictionary meanings.
 
-**Custom capture region** — By default the entire screen is captured. You can select a specific area (e.g. the dialogue box) by tapping "Full" in the top bar, then dragging on the screenshot to draw the region. Useful for reducing noise and improving translation accuracy.
+**Custom OCR region** lets you select a dialogue box or text area once, then reuse it for Region OCR. Tap Set Region the first time, or long-press Region OCR to modify it later. Full screenshots always capture the whole screen.
 
-## Supported models
+## Tech Stack
 
-| Model | Provider | Cost | Notes |
-|-------|----------|------|-------|
-| **Offline (ML Kit)** | Google | Free | On-device translation, no internet after first download (~30MB per language). Default model. |
-| **Offline Auto** | Google | Free | Same as Offline, but captures automatically every 1s. Only re-translates when text changes. |
-| **Gemini 2.5 Flash** | Google | Free tier available | AI vision model, requires API key |
-| **GPT-4o mini** | OpenAI | Pay per use | AI vision model, requires API key |
-
-Switch models from the top bar dropdown or in Settings. Each AI model stores its own API key separately.
-
-## Output language
-
-Translate into 9 languages: English, Spanish, Portuguese, French, German, Italian, Chinese, Korean, and Russian. Configurable in Settings.
-
-For Offline mode, each language downloads a ~30MB model on first use. AI models support all languages without extra downloads.
-
-## Tech stack
-
-- **Kotlin + Jetpack Compose** — UI and app logic
-- **MediaProjection API** — Screen capture (with ForegroundService for Android 14+)
-- **ML Kit Translate** — On-device offline translation (~30MB per language)
-- **OpenAI GPT-4o-mini / Google Gemini 2.5 Flash** — Vision APIs for AI Translate mode
-- **ML Kit Text Recognition v2** — On-device Japanese OCR for Dictionary mode and offline translation
-- **Kuromoji** — Japanese morphological analyzer/tokenizer
-- **JMDict** — 212,478 entry offline Japanese-English dictionary
-- **OkHttp** — HTTP client for API calls
+- Kotlin + Jetpack Compose
+- MediaProjection API with a foreground service for screen capture
+- ML Kit Text Recognition v2 for Japanese OCR
+- Kuromoji for Japanese tokenization
+- Bundled JSON dictionary derived from JMDict-style entries
+- SharedPreferences for settings
+- App-private file storage for notebook screenshots and metadata
 
 ## Setup
 
 ### Requirements
-- Android SDK (compileSdk 35, minSdk 26)
-- An API key for Translate mode (Google AI free tier recommended, or OpenAI)
+
+- Android SDK, compileSdk 35
+- JDK 17 recommended for the current Gradle/Kotlin toolchain
 
 ### Build
+
 ```bash
-# Clone
-git clone <repo-url>
-cd kanjilens
-
-# Set your SDK path
 echo "sdk.dir=$HOME/Android/sdk" > local.properties
-
-# Build and install
-./gradlew installDebug
+JAVA_HOME=/usr/lib/jvm/java-17-openjdk ./gradlew installDebug
 ```
 
-### Configuration
-1. Open ThorLens on your device
-2. The default model is **Offline (ML Kit)** — works immediately, no API key needed
-3. To use AI models: tap **...** (top right) → Settings → choose Gemini Flash or GPT-4o mini → paste your API key
-4. Choose your output language (default: English)
-5. Choose your preferred translation style for AI models (Auto/Translate/Explain)
-6. Adjust text size if needed (S/M/L)
+Adjust `sdk.dir` and `JAVA_HOME` for your machine.
 
-## Usage
+## Project Structure
 
-1. Run your game on the top screen
-2. Open ThorLens on the bottom screen
-3. Switch between **Translate** (any language) and **JP Dictionary** (offline, Japanese only)
-4. Switch models from the top bar dropdown (Offline → Offline Auto → Gemini → GPT-4o)
-5. Press the button to capture and translate the top screen (or select Offline Auto for continuous translation)
-6. Optionally tap **Full** in the top bar to select a custom capture region
-7. Results persist when switching between modes or going to Settings
-
-## Project structure
-
-```
+```text
 app/src/main/java/com/kanjilens/
-├── MainActivity.kt              # Entry point, navigation, state management
+├── MainActivity.kt
 ├── capture/
-│   ├── ScreenCaptureManager.kt  # MediaProjection + VirtualDisplay
-│   └── ScreenCaptureService.kt  # ForegroundService for Android 14+
+│   ├── ScreenCaptureManager.kt
+│   └── ScreenCaptureService.kt
+├── data/
+│   ├── NotebookRepository.kt
+│   └── models/
+│       ├── AppSettings.kt
+│       ├── CaptureState.kt
+│       └── NotebookEntry.kt
 ├── ocr/
-│   └── TextRecognizer.kt        # ML Kit Japanese OCR wrapper
+│   └── TextRecognizer.kt
 ├── analysis/
-│   ├── JapaneseTokenizer.kt     # Kuromoji tokenizer wrapper
-│   └── DictionaryLookup.kt      # JMDict dictionary lookup
-├── translate/
-│   └── ScreenTranslator.kt      # Multi-model translator (ML Kit offline + OpenAI + Gemini)
-├── data/models/
-│   ├── AppSettings.kt           # SharedPreferences with StateFlow
-│   └── CaptureState.kt          # State models (WordEntry, AnalysisResult, etc)
+│   ├── JapaneseTokenizer.kt
+│   └── DictionaryLookup.kt
 └── ui/
     ├── screens/
-    │   ├── MainScreen.kt        # Main UI with mode toggle and model selector
-    │   ├── SettingsScreen.kt    # Settings (model, language, style, keys, text size)
-    │   ├── CropScreen.kt        # Visual capture region selector
-    │   └── HelpScreen.kt        # Usage guide and API key instructions
+    │   ├── MainScreen.kt
+    │   ├── CropScreen.kt
+    │   ├── SettingsScreen.kt
+    │   └── HelpScreen.kt
     ├── components/
-    │   ├── CaptureButton.kt     # Capture button with loading state
-    │   ├── TranslationResult.kt # Dictionary word breakdown view
-    │   └── WordCard.kt          # Individual word card (kanji, reading, meaning)
+    │   └── WordCard.kt
     └── theme/
-        └── Theme.kt             # Dark theme (navy + pink)
+        └── Theme.kt
 ```
 
 ## License
