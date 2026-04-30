@@ -77,8 +77,8 @@ fun HelpScreen(
 
             HelpSection("Dictionary")
             HelpBody(
-                "The Dictionary page uses manual text input. Type or paste Japanese text, then look it up " +
-                    "to see readings and meanings from the bundled offline dictionary."
+                "The Dictionary page uses manual English input. Type an English word, then look it up " +
+                    "to see offline definitions, examples, and synonyms from Open English WordNet."
             )
 
             HelpDivider()

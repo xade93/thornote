@@ -14,7 +14,7 @@ Notebook app for information-heavy games, visual novels, novels, and detective g
 - OCR text entries can be corrected in place when recognition is inaccurate.
 - Swipe a screenshot or OCR entry sideways to delete it.
 
-**Dictionary page** keeps Japanese word lookup available for moments when a word is hard to remember. Type or paste Japanese text manually, then ThorNotes tokenizes it and shows readings and dictionary meanings.
+**Dictionary page** keeps English word lookup available for moments when a word is hard to remember. Type an English word manually, then ThorNotes shows offline definitions, examples, and synonyms from Open English WordNet 2024.
 
 **Custom OCR region** lets you select a dialogue box or text area once, then reuse it for OCR. Tap Set Region the first time, or long-press OCR to modify it later. Full screenshots always capture the whole screen.
 
@@ -23,8 +23,7 @@ Notebook app for information-heavy games, visual novels, novels, and detective g
 - Kotlin + Jetpack Compose
 - MediaProjection API with a foreground service for screen capture
 - ML Kit Text Recognition v2 for Japanese OCR
-- Kuromoji for Japanese tokenization
-- Bundled JSON dictionary derived from JMDict-style entries
+- SQLite English dictionary generated from Open English WordNet 2024
 - SharedPreferences for settings
 - App-private file storage for notebook screenshots and metadata
 
@@ -61,8 +60,7 @@ app/src/main/java/com/kanjilens/
 ├── ocr/
 │   └── TextRecognizer.kt
 ├── analysis/
-│   ├── JapaneseTokenizer.kt
-│   └── DictionaryLookup.kt
+│   └── EnglishDictionaryLookup.kt
 └── ui/
     ├── screens/
     │   ├── MainScreen.kt
@@ -70,7 +68,7 @@ app/src/main/java/com/kanjilens/
     │   ├── SettingsScreen.kt
     │   └── HelpScreen.kt
     ├── components/
-    │   └── WordCard.kt
+    │   └── DictionaryResultView.kt
     └── theme/
         └── Theme.kt
 ```

@@ -1,0 +1,7 @@
+Open English WordNet 2024
+
+Source: https://en-word.net/
+Repository: https://github.com/globalwordnet/english-wordnet
+License: Creative Commons Attribution 4.0 International (CC BY 4.0)
+
+Open English WordNet is derived from Princeton WordNet by the Open English WordNet Community.

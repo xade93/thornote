@@ -53,14 +53,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import com.kanjilens.analysis.DictionaryLookup
-import com.kanjilens.analysis.JapaneseTokenizer
+import com.kanjilens.analysis.EnglishDictionaryLookup
 import com.kanjilens.capture.ScreenCaptureManager
 import com.kanjilens.capture.ScreenCaptureService
 import com.kanjilens.data.NotebookRepository
-import com.kanjilens.data.models.AnalysisResult
 import com.kanjilens.data.models.AppSettings
 import com.kanjilens.data.models.CaptureState
+import com.kanjilens.data.models.EnglishDictionaryEntry
 import com.kanjilens.data.models.NotebookEntry
 import com.kanjilens.data.models.NotebookEntryType
 import com.kanjilens.data.models.NotebookPageInfo
@@ -87,8 +86,7 @@ private enum class PendingCapture {
 fun MainScreen(
     captureManager: ScreenCaptureManager,
     textRecognizer: TextRecognizer,
-    tokenizer: JapaneseTokenizer,
-    dictionary: DictionaryLookup,
+    dictionary: EnglishDictionaryLookup,
     settings: AppSettings,
     notebook: NotebookRepository,
     captureState: CaptureState,
@@ -106,7 +104,7 @@ fun MainScreen(
     val currentNotebookPage = pages.firstOrNull { it.id == currentPageId }
 
     var currentPage by remember { mutableStateOf(NotebookPage.NOTEBOOK) }
-    var dictionaryResult by remember { mutableStateOf<AnalysisResult?>(null) }
+    var dictionaryResult by remember { mutableStateOf<List<EnglishDictionaryEntry>>(emptyList()) }
     var dictionaryInput by remember { mutableStateOf("") }
     var pendingCapture by remember { mutableStateOf(PendingCapture.NONE) }
     val isProcessing = captureState is CaptureState.Capturing || captureState is CaptureState.Processing
@@ -205,9 +203,7 @@ fun MainScreen(
                         currentPage = currentPage,
                         onPageChange = {
                             currentPage = it
-                            if (captureState !is CaptureState.DictionarySuccess) {
-                                onCaptureStateChange(CaptureState.Idle)
-                            }
+                            onCaptureStateChange(CaptureState.Idle)
                         },
                     )
                 },
@@ -274,7 +270,7 @@ fun MainScreen(
                     onInputChange = {
                         dictionaryInput = it
                         if (it.isBlank()) {
-                            dictionaryResult = null
+                            dictionaryResult = emptyList()
                             onCaptureStateChange(CaptureState.Idle)
                         }
                     },
@@ -283,8 +279,7 @@ fun MainScreen(
                         if (text.isBlank()) {
                             onCaptureStateChange(CaptureState.Error("Enter text to look up"))
                         } else {
-                            val words = dictionary.lookupTokens(tokenizer.tokenize(text))
-                            dictionaryResult = AnalysisResult(originalText = text, words = words)
+                            dictionaryResult = dictionary.lookup(text)
                             onCaptureStateChange(CaptureState.Idle)
                         }
                     },
@@ -405,7 +400,7 @@ private fun NotebookPageContent(
 @Composable
 private fun DictionaryPageContent(
     input: String,
-    result: AnalysisResult?,
+    result: List<EnglishDictionaryEntry>,
     textSize: Int,
     onInputChange: (String) -> Unit,
     onLookupClick: () -> Unit,
@@ -419,8 +414,8 @@ private fun DictionaryPageContent(
             value = input,
             onValueChange = onInputChange,
             modifier = Modifier.fillMaxWidth(),
-            minLines = 3,
-            placeholder = { Text("Enter Japanese text") },
+            singleLine = true,
+            placeholder = { Text("Enter English word") },
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = MaterialTheme.colorScheme.primary,
                 unfocusedBorderColor = MaterialTheme.colorScheme.outline,
@@ -442,11 +437,11 @@ private fun DictionaryPageContent(
                 .weight(1f)
                 .verticalScroll(rememberScrollState()),
         ) {
-            if (result == null) {
-                EmptyState("Type words or a sentence to look up readings and meanings.")
+            if (result.isEmpty()) {
+                EmptyState("Type an English word to look up definitions and synonyms.")
             } else {
                 Text(
-                    text = result.originalText,
+                    text = input.trim(),
                     fontSize = 15.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     lineHeight = 21.sp,

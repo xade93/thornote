@@ -70,10 +70,7 @@ dependencies {
     // ML Kit - Japanese text recognition
     implementation("com.google.mlkit:text-recognition-japanese:16.0.1")
 
-    // Kuromoji - Japanese tokenizer
-    implementation("com.atilika.kuromoji:kuromoji-ipadic:0.9.0")
-
-    // Gson - JSON parsing for dictionary
+    // Gson - JSON parsing for dictionary result fields
     implementation("com.google.code.gson:gson:2.11.0")
 
     // Room - SQLite for JMDict (Phase 4)

@@ -10,8 +10,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import com.kanjilens.analysis.DictionaryLookup
-import com.kanjilens.analysis.JapaneseTokenizer
+import com.kanjilens.analysis.EnglishDictionaryLookup
 import com.kanjilens.capture.ScreenCaptureManager
 import com.kanjilens.data.NotebookRepository
 import com.kanjilens.data.models.AppSettings
@@ -27,8 +26,7 @@ class MainActivity : ComponentActivity() {
 
     lateinit var captureManager: ScreenCaptureManager
     lateinit var textRecognizer: TextRecognizer
-    lateinit var tokenizer: JapaneseTokenizer
-    lateinit var dictionary: DictionaryLookup
+    lateinit var dictionary: EnglishDictionaryLookup
     lateinit var settings: AppSettings
     lateinit var notebook: NotebookRepository
 
@@ -44,8 +42,7 @@ class MainActivity : ComponentActivity() {
         )
         captureManager = ScreenCaptureManager(this)
         textRecognizer = TextRecognizer()
-        tokenizer = JapaneseTokenizer()
-        dictionary = DictionaryLookup(this)
+        dictionary = EnglishDictionaryLookup(this)
         settings = AppSettings(this)
         notebook = NotebookRepository(this)
         enableEdgeToEdge()
@@ -79,7 +76,6 @@ class MainActivity : ComponentActivity() {
                     else -> MainScreen(
                         captureManager = captureManager,
                         textRecognizer = textRecognizer,
-                        tokenizer = tokenizer,
                         dictionary = dictionary,
                         settings = settings,
                         notebook = notebook,
@@ -100,5 +96,6 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
         captureManager.release()
         textRecognizer.close()
+        dictionary.close()
     }
 }
