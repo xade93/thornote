@@ -86,7 +86,6 @@ class MainActivity : ComponentActivity() {
                         captureState = captureState,
                         onCaptureStateChange = { captureState = it },
                         onSettingsClick = { currentScreen = "settings" },
-                        onHelpClick = { currentScreen = "help" },
                         onCropClick = { bitmap ->
                             cropScreenshot = bitmap
                             currentScreen = "crop"

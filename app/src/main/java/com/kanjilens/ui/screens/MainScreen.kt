@@ -94,7 +94,6 @@ fun MainScreen(
     captureState: CaptureState,
     onCaptureStateChange: (CaptureState) -> Unit,
     onSettingsClick: () -> Unit,
-    onHelpClick: () -> Unit,
     onCropClick: (Bitmap) -> Unit = {},
 ) {
     val context = LocalContext.current
@@ -213,14 +212,6 @@ fun MainScreen(
                     )
                 },
                 actions = {
-                    IconButton(onClick = onHelpClick) {
-                        Text(
-                            text = "?",
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onBackground,
-                        )
-                    }
                     IconButton(onClick = onSettingsClick) {
                         Text(
                             text = "\u2699",
