@@ -8,6 +8,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -19,6 +20,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -35,6 +41,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,6 +55,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -359,6 +367,18 @@ private fun NotebookPageContent(
     onDeleteEntry: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val listState = rememberLazyListState()
+    val screenshotEntries = remember(entries) {
+        entries.filter { it.type == NotebookEntryType.SCREENSHOT && it.imagePath != null }
+    }
+    val firstVisibleEntryId by remember {
+        derivedStateOf { entries.getOrNull(listState.firstVisibleItemIndex)?.id }
+    }
+    var selectedPreviewId by remember(currentPage?.id) { mutableStateOf<String?>(null) }
+    val highlightedEntryId = selectedPreviewId ?: firstVisibleEntryId
+    val scope = rememberCoroutineScope()
+    val screenshotContentOffset = with(LocalDensity.current) { 40.dp.toPx().toInt() }
+
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -373,25 +393,110 @@ private fun NotebookPageContent(
 
         StatusLine(state = state)
 
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            if (entries.isEmpty()) {
-                EmptyState("Capture screenshots or OCR text to build this notebook.")
-            } else {
-                entries.forEach { entry ->
+        if (screenshotEntries.size > 1) {
+            ScreenshotMinimap(
+                screenshots = screenshotEntries,
+                selectedEntryId = highlightedEntryId,
+                onScreenshotSelected = { entry ->
+                    val index = entries.indexOfFirst { it.id == entry.id }
+                    if (index >= 0) {
+                        selectedPreviewId = entry.id
+                        scope.launch { listState.animateScrollToItem(index, screenshotContentOffset) }
+                    }
+                },
+            )
+        }
+
+        if (entries.isEmpty()) {
+            EmptyState(
+                text = "Capture screenshots or OCR text to build this notebook.",
+                modifier = Modifier.weight(1f),
+            )
+        } else {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                itemsIndexed(
+                    items = entries,
+                    key = { _, entry -> entry.id },
+                ) { _, entry ->
                     NotebookEntryView(
                         entry = entry,
                         textSize = textSize,
                         onTextChange = onTextChange,
-                        onDelete = onDeleteEntry,
+                        onDelete = {
+                            if (selectedPreviewId == it) selectedPreviewId = null
+                            onDeleteEntry(it)
+                        },
                     )
                 }
-                Spacer(modifier = Modifier.height(16.dp))
+                item {
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScreenshotMinimap(
+    screenshots: List<NotebookEntry>,
+    selectedEntryId: String?,
+    onScreenshotSelected: (NotebookEntry) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            text = "Screenshots",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            itemsIndexed(
+                items = screenshots,
+                key = { _, entry -> entry.id },
+            ) { index, entry ->
+                val selected = entry.id == selectedEntryId
+                val thumbnail = remember(entry.imagePath) {
+                    entry.imagePath?.let { decodeThumbnail(it, maxSize = 180) }
+                }
+                Box(
+                    modifier = Modifier
+                        .width(72.dp)
+                        .height(54.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .border(
+                            width = if (selected) 2.dp else 1.dp,
+                            color = if (selected) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.outline,
+                            shape = RoundedCornerShape(6.dp),
+                        )
+                        .clickable { onScreenshotSelected(entry) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (thumbnail != null) {
+                        Image(
+                            bitmap = thumbnail.asImageBitmap(),
+                            contentDescription = "Jump to screenshot ${index + 1}",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop,
+                        )
+                    } else {
+                        Text(
+                            text = "${index + 1}",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
             }
         }
     }
@@ -730,7 +835,7 @@ private fun NotebookEntryView(
         when (entry.type) {
             NotebookEntryType.SCREENSHOT -> {
                 val bitmap = remember(entry.imagePath) {
-                    entry.imagePath?.let { BitmapFactory.decodeFile(it) }
+                    entry.imagePath?.let { BitmapFactory.decodeFile(it)?.trimHorizontalBlackBars() }
                 }
                 if (bitmap != null) {
                     Image(
@@ -769,9 +874,12 @@ private fun NotebookEntryView(
 }
 
 @Composable
-private fun EmptyState(text: String) {
+private fun EmptyState(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(top = 64.dp),
         contentAlignment = Alignment.Center,
@@ -784,4 +892,65 @@ private fun EmptyState(text: String) {
             lineHeight = 21.sp,
         )
     }
+}
+
+private fun decodeThumbnail(path: String, maxSize: Int): Bitmap? {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeFile(path, bounds)
+    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+
+    var sampleSize = 1
+    val largestSide = maxOf(bounds.outWidth, bounds.outHeight)
+    while (largestSide / sampleSize > maxSize) {
+        sampleSize *= 2
+    }
+
+    return BitmapFactory.decodeFile(
+        path,
+        BitmapFactory.Options().apply { inSampleSize = sampleSize },
+    )?.trimHorizontalBlackBars()
+}
+
+private fun Bitmap.trimHorizontalBlackBars(): Bitmap {
+    if (width <= 1 || height <= 1) return this
+
+    val top = firstContentRow()
+    val bottom = lastContentRow()
+    if (top == 0 && bottom == height - 1) return this
+    if (bottom <= top) return this
+
+    return Bitmap.createBitmap(this, 0, top, width, bottom - top + 1)
+}
+
+private fun Bitmap.firstContentRow(): Int {
+    for (y in 0 until height) {
+        if (!isBlackBarRow(y)) return y
+    }
+    return 0
+}
+
+private fun Bitmap.lastContentRow(): Int {
+    for (y in height - 1 downTo 0) {
+        if (!isBlackBarRow(y)) return y
+    }
+    return height - 1
+}
+
+private fun Bitmap.isBlackBarRow(y: Int): Boolean {
+    val step = maxOf(1, width / 160)
+    var samples = 0
+    var blackSamples = 0
+    var x = 0
+    while (x < width) {
+        val pixel = getPixel(x, y)
+        val red = (pixel shr 16) and 0xff
+        val green = (pixel shr 8) and 0xff
+        val blue = pixel and 0xff
+        if (red + green + blue <= 54) {
+            blackSamples++
+        }
+        samples++
+        x += step
+    }
+    return samples > 0 && blackSamples.toFloat() / samples >= 0.98f
 }

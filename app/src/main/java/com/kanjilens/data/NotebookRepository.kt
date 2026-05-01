@@ -25,6 +25,7 @@ class NotebookRepository(private val context: Context) {
     private val notebookDir = File(context.filesDir, "notebook")
     private val metadataFile = File(notebookDir, "pages.json")
     private val legacyEntriesFile = File(notebookDir, "entries.json")
+    private val preferences = context.getSharedPreferences("notebook", Context.MODE_PRIVATE)
 
     private var storedPages: List<StoredPage> = emptyList()
     private var allEntries: List<NotebookEntry> = emptyList()
@@ -45,13 +46,15 @@ class NotebookRepository(private val context: Context) {
             storedPages = listOf(createStoredPage("Default"))
         }
         importLegacyEntriesIfNeeded()
-        _currentPageId.value = storedPages.first().id
+        val lastPageId = preferences.getString(KEY_LAST_PAGE_ID, null)
+        _currentPageId.value = storedPages.firstOrNull { it.id == lastPageId }?.id ?: storedPages.first().id
         refresh()
     }
 
     fun selectPage(pageId: String) {
         if (storedPages.any { it.id == pageId }) {
             _currentPageId.value = pageId
+            saveLastPageId(pageId)
             refresh()
         }
     }
@@ -61,6 +64,7 @@ class NotebookRepository(private val context: Context) {
         val page = createStoredPage(cleanName)
         storedPages = listOf(page) + storedPages
         _currentPageId.value = page.id
+        saveLastPageId(page.id)
         savePages()
         refresh()
         return page.id
@@ -76,6 +80,7 @@ class NotebookRepository(private val context: Context) {
         if (_currentPageId.value == pageId) {
             _currentPageId.value = storedPages.first().id
         }
+        saveLastPageId(_currentPageId.value)
         savePages()
         refresh()
     }
@@ -161,8 +166,13 @@ class NotebookRepository(private val context: Context) {
     private fun ensureCurrentPageId(): String {
         if (_currentPageId.value.isBlank() || storedPages.none { it.id == _currentPageId.value }) {
             _currentPageId.value = storedPages.first().id
+            saveLastPageId(_currentPageId.value)
         }
         return _currentPageId.value
+    }
+
+    private fun saveLastPageId(pageId: String) {
+        preferences.edit().putString(KEY_LAST_PAGE_ID, pageId).apply()
     }
 
     private fun createStoredPage(name: String): StoredPage {
@@ -249,5 +259,9 @@ class NotebookRepository(private val context: Context) {
         if (!file.exists()) return 0L
         if (file.isFile) return file.length()
         return file.listFiles()?.sumOf { directorySize(it) } ?: 0L
+    }
+
+    private companion object {
+        const val KEY_LAST_PAGE_ID = "last_page_id"
     }
 }
