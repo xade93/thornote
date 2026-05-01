@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -28,6 +29,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -37,9 +39,11 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -117,6 +121,12 @@ fun MainScreen(
     var dictionaryInput by remember { mutableStateOf("") }
     var pendingCapture by remember { mutableStateOf(PendingCapture.NONE) }
     val isProcessing = captureState is CaptureState.Capturing || captureState is CaptureState.Processing
+
+    LaunchedEffect(captureState) {
+        val error = captureState as? CaptureState.Error ?: return@LaunchedEffect
+        Toast.makeText(context, error.message, Toast.LENGTH_SHORT).show()
+        onCaptureStateChange(CaptureState.Idle)
+    }
 
     fun cropBitmap(bitmap: Bitmap): Bitmap {
         if (!cropEnabled) return bitmap
@@ -208,12 +218,17 @@ fun MainScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    TopPageSwitch(
+                    NotebookTopBarTitle(
                         currentPage = currentPage,
+                        pages = pages,
+                        currentNotebookPage = currentNotebookPage,
                         onPageChange = {
                             currentPage = it
                             onCaptureStateChange(CaptureState.Idle)
                         },
+                        onNotebookPageSelected = notebook::selectPage,
+                        onCreateNotebookPage = notebook::createPage,
+                        onDeleteNotebookPage = notebook::deletePage,
                     )
                 },
                 actions = {
@@ -259,15 +274,8 @@ fun MainScreen(
         ) {
             when (currentPage) {
                 NotebookPage.NOTEBOOK -> NotebookPageContent(
-                    pages = pages,
-                    currentPage = currentNotebookPage,
                     entries = entries,
-                    state = captureState,
-                    cropEnabled = cropEnabled,
                     textSize = textSize,
-                    onPageSelected = notebook::selectPage,
-                    onCreatePage = notebook::createPage,
-                    onDeletePage = notebook::deletePage,
                     onTextChange = notebook::updateText,
                     onDeleteEntry = notebook::deleteEntry,
                     modifier = Modifier.weight(1f),
@@ -300,24 +308,69 @@ fun MainScreen(
 }
 
 @Composable
-private fun TopPageSwitch(
+private fun NotebookTopBarTitle(
+    currentPage: NotebookPage,
+    pages: List<NotebookPageInfo>,
+    currentNotebookPage: NotebookPageInfo?,
+    onPageChange: (NotebookPage) -> Unit,
+    onNotebookPageSelected: (String) -> Unit,
+    onCreateNotebookPage: (String) -> Unit,
+    onDeleteNotebookPage: (String) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(end = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        TopModeSwitch(
+            currentPage = currentPage,
+            onPageChange = onPageChange,
+        )
+
+        if (currentPage == NotebookPage.NOTEBOOK) {
+            NotebookPageSelector(
+                pages = pages,
+                currentPage = currentNotebookPage,
+                onPageSelected = onNotebookPageSelected,
+                onCreatePage = onCreateNotebookPage,
+                onDeletePage = onDeleteNotebookPage,
+                modifier = Modifier.weight(1f),
+            )
+        } else {
+            Text(
+                text = "Dictionary",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun TopModeSwitch(
     currentPage: NotebookPage,
     onPageChange: (NotebookPage) -> Unit,
 ) {
     Row(
         modifier = Modifier
-            .fillMaxWidth(0.82f)
-            .clip(RoundedCornerShape(12.dp))
+            .width(82.dp)
+            .clip(RoundedCornerShape(10.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant),
     ) {
-        PageOption(
-            label = "Notebook",
+        ModeIconOption(
+            label = "\u25a4",
             selected = currentPage == NotebookPage.NOTEBOOK,
             onClick = { onPageChange(NotebookPage.NOTEBOOK) },
             modifier = Modifier.weight(1f),
         )
-        PageOption(
-            label = "Dictionary",
+        ModeIconOption(
+            label = "Aa",
             selected = currentPage == NotebookPage.DICTIONARY,
             onClick = { onPageChange(NotebookPage.DICTIONARY) },
             modifier = Modifier.weight(1f),
@@ -326,7 +379,7 @@ private fun TopPageSwitch(
 }
 
 @Composable
-private fun PageOption(
+private fun ModeIconOption(
     label: String,
     selected: Boolean,
     onClick: () -> Unit,
@@ -334,13 +387,14 @@ private fun PageOption(
 ) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
+            .height(36.dp)
+            .clip(RoundedCornerShape(10.dp))
             .background(
                 if (selected) MaterialTheme.colorScheme.primary
                 else MaterialTheme.colorScheme.surfaceVariant
             )
             .clickable { onClick() }
-            .padding(vertical = 8.dp),
+            .padding(horizontal = 4.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
@@ -355,15 +409,8 @@ private fun PageOption(
 
 @Composable
 private fun NotebookPageContent(
-    pages: List<NotebookPageInfo>,
-    currentPage: NotebookPageInfo?,
     entries: List<NotebookEntry>,
-    state: CaptureState,
-    cropEnabled: Boolean,
     textSize: Int,
-    onPageSelected: (String) -> Unit,
-    onCreatePage: (String) -> Unit,
-    onDeletePage: (String) -> Unit,
     onTextChange: (String, String) -> Unit,
     onDeleteEntry: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -372,7 +419,7 @@ private fun NotebookPageContent(
     val firstVisibleEntryId by remember {
         derivedStateOf { entries.getOrNull(listState.firstVisibleItemIndex)?.id }
     }
-    var selectedPreviewId by remember(currentPage?.id) { mutableStateOf<String?>(null) }
+    var selectedPreviewId by remember(entries.firstOrNull()?.pageId) { mutableStateOf<String?>(null) }
     val highlightedEntryId = selectedPreviewId ?: firstVisibleEntryId
     val scope = rememberCoroutineScope()
     val screenshotContentOffset = with(LocalDensity.current) { 40.dp.toPx().toInt() }
@@ -381,16 +428,6 @@ private fun NotebookPageContent(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        NotebookPageHeader(
-            pages = pages,
-            currentPage = currentPage,
-            onPageSelected = onPageSelected,
-            onCreatePage = onCreatePage,
-            onDeletePage = onDeletePage,
-        )
-
-        StatusLine(state = state)
-
         if (entries.size > 1) {
             EntryMinimap(
                 entries = entries,
@@ -592,12 +629,13 @@ private fun DictionaryPageContent(
 }
 
 @Composable
-private fun NotebookPageHeader(
+private fun NotebookPageSelector(
     pages: List<NotebookPageInfo>,
     currentPage: NotebookPageInfo?,
     onPageSelected: (String) -> Unit,
     onCreatePage: (String) -> Unit,
     onDeletePage: (String) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     var pageMenuExpanded by remember { mutableStateOf(false) }
     var creatingPage by remember { mutableStateOf(false) }
@@ -605,85 +643,80 @@ private fun NotebookPageHeader(
     val pageName = currentPage?.name ?: "No Page"
     val pageStats = currentPage?.let { "${it.entryCount} entries - ${formatBytes(it.sizeBytes)}" } ?: ""
 
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Box(modifier = modifier) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(36.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(MaterialTheme.colorScheme.primary)
+                .clickable { pageMenuExpanded = true }
+                .padding(horizontal = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(modifier = Modifier.weight(1f)) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(MaterialTheme.colorScheme.primary)
-                        .clickable { pageMenuExpanded = true }
-                        .padding(horizontal = 10.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = pageName,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                    )
-                    if (pageStats.isNotEmpty()) {
-                        Text(
-                            text = pageStats,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.82f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-                DropdownMenu(
-                    expanded = pageMenuExpanded,
-                    onDismissRequest = { pageMenuExpanded = false },
-                ) {
-                    pages.forEach { page ->
-                        DropdownMenuItem(
-                            text = { Text("${page.name} (${formatBytes(page.sizeBytes)})") },
-                            onClick = {
-                                onPageSelected(page.id)
-                                pageMenuExpanded = false
-                            },
-                        )
-                    }
-                    if (currentPage != null) {
-                        DropdownMenuItem(
-                            text = { Text("Delete current page") },
-                            onClick = {
-                                onDeletePage(currentPage.id)
-                                pageMenuExpanded = false
-                            },
-                        )
-                    }
-                }
-            }
-            SmallTextButton(
-                label = "+",
-                onClick = { creatingPage = !creatingPage },
+            Text(
+                text = pageName,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
             )
+            if (pageStats.isNotEmpty()) {
+                Text(
+                    text = pageStats,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.82f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
+        DropdownMenu(
+            expanded = pageMenuExpanded,
+            onDismissRequest = { pageMenuExpanded = false },
+        ) {
+            pages.forEach { page ->
+                DropdownMenuItem(
+                    text = { Text("${page.name} (${formatBytes(page.sizeBytes)})") },
+                    onClick = {
+                        onPageSelected(page.id)
+                        pageMenuExpanded = false
+                    },
+                )
+            }
+            DropdownMenuItem(
+                text = { Text("New page") },
+                onClick = {
+                    pageMenuExpanded = false
+                    creatingPage = true
+                },
+            )
+            if (currentPage != null) {
+                DropdownMenuItem(
+                    text = { Text("Delete current page") },
+                    onClick = {
+                        onDeletePage(currentPage.id)
+                        pageMenuExpanded = false
+                    },
+                )
+            }
+        }
+    }
 
-        if (creatingPage) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
+    if (creatingPage) {
+        AlertDialog(
+            onDismissRequest = { creatingPage = false },
+            title = { Text("New page") },
+            text = {
                 OutlinedTextField(
                     value = newPageName,
                     onValueChange = { newPageName = it },
-                    modifier = Modifier.weight(1f),
                     singleLine = true,
-                    placeholder = { Text("Novel / game name") },
+                    placeholder = { Text("Notebook page name") },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = MaterialTheme.colorScheme.primary,
                         unfocusedBorderColor = MaterialTheme.colorScheme.outline,
@@ -691,16 +724,24 @@ private fun NotebookPageHeader(
                         unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
                     ),
                 )
-                SmallTextButton(
-                    label = "Create",
+            },
+            confirmButton = {
+                TextButton(
                     onClick = {
                         onCreatePage(newPageName)
                         newPageName = ""
                         creatingPage = false
                     },
-                )
-            }
-        }
+                ) {
+                    Text("Create")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { creatingPage = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
     }
 }
 
@@ -780,25 +821,6 @@ private fun CompactActionButton(
     }
 }
 
-@Composable
-private fun SmallTextButton(
-    label: String,
-    onClick: () -> Unit,
-    color: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.primary,
-) {
-    Text(
-        text = label,
-        fontSize = 13.sp,
-        fontWeight = FontWeight.Bold,
-        color = color,
-        modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .clickable { onClick() }
-            .padding(horizontal = 10.dp, vertical = 9.dp),
-    )
-}
-
 private fun formatBytes(bytes: Long): String {
     if (bytes < 1024L) return "$bytes B"
     val kb = bytes / 1024.0
@@ -806,26 +828,6 @@ private fun formatBytes(bytes: Long): String {
     val mb = kb / 1024.0
     if (mb < 1024.0) return String.format("%.1f MB", mb)
     return String.format("%.1f GB", mb / 1024.0)
-}
-
-@Composable
-private fun StatusLine(state: CaptureState) {
-    val message = when (state) {
-        CaptureState.Capturing -> "Capturing..."
-        CaptureState.Processing -> "Reading text..."
-        is CaptureState.Error -> state.message
-        else -> ""
-    }
-    if (message.isNotEmpty()) {
-        Text(
-            text = message,
-            fontSize = 14.sp,
-            color = if (state is CaptureState.Error) MaterialTheme.colorScheme.error
-                else MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth(),
-        )
-    }
 }
 
 @Composable
