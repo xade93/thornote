@@ -70,6 +70,24 @@ class NotebookRepository(private val context: Context) {
         return page.id
     }
 
+    fun renamePage(pageId: String, name: String) {
+        val cleanName = name.trim().ifBlank { "Untitled" }
+        val now = System.currentTimeMillis()
+        var renamed = false
+        storedPages = storedPages.map { page ->
+            if (page.id == pageId) {
+                renamed = true
+                page.copy(name = cleanName, updatedAt = now)
+            } else {
+                page
+            }
+        }
+        if (renamed) {
+            savePages()
+            refresh()
+        }
+    }
+
     fun deletePage(pageId: String) {
         val page = pageDir(pageId)
         if (page.exists()) page.deleteRecursively()

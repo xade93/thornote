@@ -228,6 +228,7 @@ fun MainScreen(
                         },
                         onNotebookPageSelected = notebook::selectPage,
                         onCreateNotebookPage = notebook::createPage,
+                        onRenameNotebookPage = notebook::renamePage,
                         onDeleteNotebookPage = notebook::deletePage,
                     )
                 },
@@ -316,6 +317,7 @@ private fun NotebookTopBarTitle(
     onPageChange: (NotebookPage) -> Unit,
     onNotebookPageSelected: (String) -> Unit,
     onCreateNotebookPage: (String) -> Unit,
+    onRenameNotebookPage: (String, String) -> Unit,
     onDeleteNotebookPage: (String) -> Unit,
 ) {
     Row(
@@ -336,6 +338,7 @@ private fun NotebookTopBarTitle(
                 currentPage = currentNotebookPage,
                 onPageSelected = onNotebookPageSelected,
                 onCreatePage = onCreateNotebookPage,
+                onRenamePage = onRenameNotebookPage,
                 onDeletePage = onDeleteNotebookPage,
                 modifier = Modifier.weight(1f),
             )
@@ -425,6 +428,7 @@ private fun NotebookPageContent(
     val highlightedEntryId = selectedPreviewId ?: firstVisibleEntryId
     val scope = rememberCoroutineScope()
     val screenshotContentOffset = with(LocalDensity.current) { 40.dp.toPx().toInt() }
+    var entryPendingDelete by remember { mutableStateOf<NotebookEntry?>(null) }
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -473,8 +477,7 @@ private fun NotebookPageContent(
                         imagePathResolver = imagePathResolver,
                         onTextChange = onTextChange,
                         onDelete = {
-                            if (selectedPreviewId == it) selectedPreviewId = null
-                            onDeleteEntry(it)
+                            entryPendingDelete = entry
                         },
                     )
                 }
@@ -483,6 +486,39 @@ private fun NotebookPageContent(
                 }
             }
         }
+    }
+
+    entryPendingDelete?.let { entry ->
+        val isScreenshot = entry.type == NotebookEntryType.SCREENSHOT
+        AlertDialog(
+            onDismissRequest = { entryPendingDelete = null },
+            title = { Text(if (isScreenshot) "Delete photo?" else "Delete text block?") },
+            text = {
+                Text(
+                    text = if (isScreenshot) {
+                        "This will remove the photo from this notebook page."
+                    } else {
+                        "This will remove this text block from this notebook page."
+                    },
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (selectedPreviewId == entry.id) selectedPreviewId = null
+                        onDeleteEntry(entry.id)
+                        entryPendingDelete = null
+                    },
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { entryPendingDelete = null }) {
+                    Text("Cancel")
+                }
+            },
+        )
     }
 }
 
@@ -640,12 +676,16 @@ private fun NotebookPageSelector(
     currentPage: NotebookPageInfo?,
     onPageSelected: (String) -> Unit,
     onCreatePage: (String) -> Unit,
+    onRenamePage: (String, String) -> Unit,
     onDeletePage: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var pageMenuExpanded by remember { mutableStateOf(false) }
     var creatingPage by remember { mutableStateOf(false) }
+    var renamingPage by remember { mutableStateOf(false) }
+    var pagePendingDelete by remember { mutableStateOf<NotebookPageInfo?>(null) }
     var newPageName by remember { mutableStateOf("") }
+    var renamedPageName by remember(currentPage?.id) { mutableStateOf(currentPage?.name.orEmpty()) }
     val pageName = currentPage?.name ?: "No Page"
     val pageStats = currentPage?.let { "${it.entryCount} entries - ${formatBytes(it.sizeBytes)}" } ?: ""
 
@@ -703,10 +743,18 @@ private fun NotebookPageSelector(
             )
             if (currentPage != null) {
                 DropdownMenuItem(
+                    text = { Text("Rename current page") },
+                    onClick = {
+                        renamedPageName = currentPage.name
+                        pageMenuExpanded = false
+                        renamingPage = true
+                    },
+                )
+                DropdownMenuItem(
                     text = { Text("Delete current page") },
                     onClick = {
-                        onDeletePage(currentPage.id)
                         pageMenuExpanded = false
+                        pagePendingDelete = currentPage
                     },
                 )
             }
@@ -744,6 +792,67 @@ private fun NotebookPageSelector(
             },
             dismissButton = {
                 TextButton(onClick = { creatingPage = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    if (renamingPage && currentPage != null) {
+        AlertDialog(
+            onDismissRequest = { renamingPage = false },
+            title = { Text("Rename page") },
+            text = {
+                OutlinedTextField(
+                    value = renamedPageName,
+                    onValueChange = { renamedPageName = it },
+                    singleLine = true,
+                    placeholder = { Text("Notebook page name") },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                    ),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onRenamePage(currentPage.id, renamedPageName)
+                        renamingPage = false
+                    },
+                ) {
+                    Text("Rename")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { renamingPage = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    pagePendingDelete?.let { page ->
+        AlertDialog(
+            onDismissRequest = { pagePendingDelete = null },
+            title = { Text("Delete notebook page?") },
+            text = {
+                Text("This will delete \"${page.name}\" and all photos and text blocks on that page.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDeletePage(page.id)
+                        pagePendingDelete = null
+                    },
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pagePendingDelete = null }) {
                     Text("Cancel")
                 }
             },
