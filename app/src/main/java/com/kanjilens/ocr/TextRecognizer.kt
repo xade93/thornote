@@ -4,7 +4,7 @@ import android.graphics.Bitmap
 import android.util.Log
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.japanese.JapaneseTextRecognizerOptions
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
@@ -15,7 +15,7 @@ class TextRecognizer {
     }
 
     private val recognizer = TextRecognition.getClient(
-        JapaneseTextRecognizerOptions.Builder().build()
+        TextRecognizerOptions.DEFAULT_OPTIONS
     )
 
     suspend fun recognizeText(bitmap: Bitmap): String? = suspendCancellableCoroutine { continuation ->

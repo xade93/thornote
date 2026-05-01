@@ -2,7 +2,7 @@
 <resources>
     <string name="app_name">ThorNotes</string>
     <string name="translate_button">Capture</string>
-    <string name="no_text_found">No Japanese text found</string>
+    <string name="no_text_found">No text found</string>
     <string name="ready_to_capture">Capture screenshots or OCR text</string>
     <string name="processing">Analyzing...</string>
     <string name="settings">Settings</string>

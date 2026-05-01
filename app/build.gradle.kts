@@ -67,8 +67,8 @@ dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
 
-    // ML Kit - Japanese text recognition
-    implementation("com.google.mlkit:text-recognition-japanese:16.0.1")
+    // ML Kit - text recognition
+    implementation("com.google.mlkit:text-recognition:16.0.1")
 
     // Gson - JSON parsing for dictionary result fields
     implementation("com.google.code.gson:gson:2.11.0")

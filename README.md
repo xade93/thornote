@@ -22,7 +22,7 @@ Notebook app for information-heavy games, visual novels, novels, and detective g
 
 - Kotlin + Jetpack Compose
 - MediaProjection API with a foreground service for screen capture
-- ML Kit Text Recognition v2 for Japanese OCR
+- ML Kit Text Recognition v2 for OCR
 - SQLite English dictionary generated from Open English WordNet 2024
 - SharedPreferences for settings
 - App-private file storage for notebook screenshots and metadata

@@ -58,6 +58,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -151,7 +152,7 @@ fun MainScreen(
             onCaptureStateChange(CaptureState.Processing)
             val text = textRecognizer.recognizeText(cropBitmap(fullBitmap))
             if (text.isNullOrBlank()) {
-                onCaptureStateChange(CaptureState.Error("No Japanese text found in selected region"))
+                onCaptureStateChange(CaptureState.Error("No text found in selected region"))
                 return@launch
             }
             notebook.addOcrText(text)
@@ -368,9 +369,6 @@ private fun NotebookPageContent(
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
-    val screenshotEntries = remember(entries) {
-        entries.filter { it.type == NotebookEntryType.SCREENSHOT && it.imagePath != null }
-    }
     val firstVisibleEntryId by remember {
         derivedStateOf { entries.getOrNull(listState.firstVisibleItemIndex)?.id }
     }
@@ -393,15 +391,20 @@ private fun NotebookPageContent(
 
         StatusLine(state = state)
 
-        if (screenshotEntries.size > 1) {
-            ScreenshotMinimap(
-                screenshots = screenshotEntries,
+        if (entries.size > 1) {
+            EntryMinimap(
+                entries = entries,
                 selectedEntryId = highlightedEntryId,
-                onScreenshotSelected = { entry ->
+                onEntrySelected = { entry ->
                     val index = entries.indexOfFirst { it.id == entry.id }
                     if (index >= 0) {
                         selectedPreviewId = entry.id
-                        scope.launch { listState.animateScrollToItem(index, screenshotContentOffset) }
+                        val scrollOffset = if (entry.type == NotebookEntryType.SCREENSHOT) {
+                            screenshotContentOffset
+                        } else {
+                            0
+                        }
+                        scope.launch { listState.animateScrollToItem(index, scrollOffset) }
                     }
                 },
             )
@@ -443,62 +446,91 @@ private fun NotebookPageContent(
 }
 
 @Composable
-private fun ScreenshotMinimap(
-    screenshots: List<NotebookEntry>,
+private fun EntryMinimap(
+    entries: List<NotebookEntry>,
     selectedEntryId: String?,
-    onScreenshotSelected: (NotebookEntry) -> Unit,
+    onEntrySelected: (NotebookEntry) -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(
-            text = "Screenshots",
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        LazyRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            itemsIndexed(
-                items = screenshots,
-                key = { _, entry -> entry.id },
-            ) { index, entry ->
-                val selected = entry.id == selectedEntryId
-                val thumbnail = remember(entry.imagePath) {
-                    entry.imagePath?.let { decodeThumbnail(it, maxSize = 180) }
-                }
-                Box(
-                    modifier = Modifier
-                        .width(72.dp)
-                        .height(54.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                        .border(
-                            width = if (selected) 2.dp else 1.dp,
-                            color = if (selected) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.outline,
-                            shape = RoundedCornerShape(6.dp),
-                        )
-                        .clickable { onScreenshotSelected(entry) },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (thumbnail != null) {
-                        Image(
-                            bitmap = thumbnail.asImageBitmap(),
-                            contentDescription = "Jump to screenshot ${index + 1}",
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop,
-                        )
-                    } else {
-                        Text(
-                            text = "${index + 1}",
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.error,
-                        )
+    LazyRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        itemsIndexed(
+            items = entries,
+            key = { _, entry -> entry.id },
+        ) { index, entry ->
+            val selected = entry.id == selectedEntryId
+            val thumbnail = remember(entry.imagePath) {
+                entry.imagePath?.let { decodeThumbnail(it, maxSize = 180) }
+            }
+            Box(
+                modifier = Modifier
+                    .width(72.dp)
+                    .height(54.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .border(
+                        width = if (selected) 2.dp else 1.dp,
+                        color = if (selected) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.outline,
+                        shape = RoundedCornerShape(6.dp),
+                    )
+                    .clickable { onEntrySelected(entry) },
+                contentAlignment = Alignment.Center,
+            ) {
+                when (entry.type) {
+                    NotebookEntryType.SCREENSHOT -> {
+                        if (thumbnail != null) {
+                            Image(
+                                bitmap = thumbnail.asImageBitmap(),
+                                contentDescription = "Jump to screenshot ${index + 1}",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop,
+                            )
+                        } else {
+                            Text(
+                                text = "${index + 1}",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
                     }
+                    NotebookEntryType.OCR_TEXT -> OcrMinimapItem(
+                        index = index,
+                        text = entry.text,
+                    )
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun OcrMinimapItem(
+    index: Int,
+    text: String,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 6.dp, vertical = 5.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text(
+            text = "OCR ${index + 1}",
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+            maxLines = 1,
+        )
+        Text(
+            text = text.trim().ifBlank { "Text" },
+            fontSize = 10.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            lineHeight = 11.sp,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -571,6 +603,7 @@ private fun NotebookPageHeader(
     var creatingPage by remember { mutableStateOf(false) }
     var newPageName by remember { mutableStateOf("") }
     val pageName = currentPage?.name ?: "No Page"
+    val pageStats = currentPage?.let { "${it.entryCount} entries - ${formatBytes(it.sizeBytes)}" } ?: ""
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(
@@ -579,18 +612,36 @@ private fun NotebookPageHeader(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = pageName,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimary,
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
                         .background(MaterialTheme.colorScheme.primary)
                         .clickable { pageMenuExpanded = true }
                         .padding(horizontal = 10.dp, vertical = 8.dp),
-                )
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = pageName,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (pageStats.isNotEmpty()) {
+                        Text(
+                            text = pageStats,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.82f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
                 DropdownMenu(
                     expanded = pageMenuExpanded,
                     onDismissRequest = { pageMenuExpanded = false },
@@ -618,14 +669,6 @@ private fun NotebookPageHeader(
             SmallTextButton(
                 label = "+",
                 onClick = { creatingPage = !creatingPage },
-            )
-        }
-
-        currentPage?.let { page ->
-            Text(
-                text = "${page.entryCount} entries - ${formatBytes(page.sizeBytes)}",
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
 
