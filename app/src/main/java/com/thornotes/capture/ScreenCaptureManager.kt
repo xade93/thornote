@@ -1,4 +1,4 @@
-package com.kanjilens.capture
+package com.thornotes.capture
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -19,7 +19,7 @@ import kotlin.coroutines.resume
 class ScreenCaptureManager(private val context: Context) {
 
     companion object {
-        private const val TAG = "KanjiLens"
+        private const val TAG = "ThorNotes"
     }
 
     private var mediaProjection: MediaProjection? = null
@@ -103,7 +103,7 @@ class ScreenCaptureManager(private val context: Context) {
         // Create VirtualDisplay AFTER setting the listener
         try {
             val display = projection.createVirtualDisplay(
-                "KanjiLensCapture",
+                "ThorNotesCapture",
                 width, height, density,
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
                 reader.surface,

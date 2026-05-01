@@ -1,4 +1,4 @@
-package com.kanjilens.capture
+package com.thornotes.capture
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -15,8 +15,8 @@ import androidx.core.app.NotificationCompat
 class ScreenCaptureService : Service() {
 
     companion object {
-        private const val TAG = "KanjiLens"
-        const val CHANNEL_ID = "kanjilens_capture"
+        private const val TAG = "ThorNotes"
+        const val CHANNEL_ID = "thornotes_capture"
         const val NOTIFICATION_ID = 1
         const val EXTRA_RESULT_CODE = "result_code"
         const val EXTRA_RESULT_DATA = "result_data"
@@ -93,7 +93,7 @@ class ScreenCaptureService : Service() {
             "Screen Capture",
             NotificationManager.IMPORTANCE_LOW
         ).apply {
-            description = "KanjiLens screen capture active"
+            description = "ThorNotes screen capture active"
         }
         val manager = getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(channel)
@@ -101,7 +101,7 @@ class ScreenCaptureService : Service() {
 
     private fun createNotification(): Notification {
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("KanjiLens")
+            .setContentTitle("ThorNotes")
             .setContentText("Ready to capture")
             .setSmallIcon(android.R.drawable.ic_menu_camera)
             .setPriority(NotificationCompat.PRIORITY_LOW)

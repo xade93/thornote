@@ -1,10 +1,10 @@
-package com.kanjilens.analysis
+package com.thornotes.analysis
 
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
-import com.kanjilens.data.models.EnglishDictionaryEntry
+import com.thornotes.data.models.EnglishDictionaryEntry
 import java.io.File
 
 class EnglishDictionaryLookup(private val context: Context) {

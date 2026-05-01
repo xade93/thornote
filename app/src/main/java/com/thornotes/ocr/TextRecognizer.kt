@@ -1,4 +1,4 @@
-package com.kanjilens.ocr
+package com.thornotes.ocr
 
 import android.graphics.Bitmap
 import android.util.Log
@@ -11,7 +11,7 @@ import kotlin.coroutines.resume
 class TextRecognizer {
 
     companion object {
-        private const val TAG = "KanjiLens"
+        private const val TAG = "ThorNotes"
     }
 
     private val recognizer = TextRecognition.getClient(

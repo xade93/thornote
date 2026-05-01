@@ -1,4 +1,4 @@
-package com.kanjilens.ui.screens
+package com.thornotes.ui.screens
 
 import android.graphics.Bitmap
 import androidx.compose.foundation.Canvas
@@ -40,7 +40,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.kanjilens.data.models.AppSettings
+import com.thornotes.data.models.AppSettings
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

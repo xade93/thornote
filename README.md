@@ -1,77 +1,81 @@
 # ThorNotes
 
-Notebook app for information-heavy games, visual novels, novels, and detective games on dual-screen Android handhelds like the Ayn Thor. The game runs on the top screen; ThorNotes runs on the bottom screen.
+ThorNotes is a bottom-screen notebook for Ayn Thor. The game, novel, or visual novel stays on the top screen; ThorNotes keeps screenshots, OCR notes, and offline English lookup below it.
 
-## What It Does
+The design target is low idle cost and fast navigation under many captured entries.
 
-**Notebook page** records a browsable stream of captured context:
-- Create a separate page for each visual novel, novel, or game.
-- Switch pages from the page selector.
-- View each page's entry count and storage usage.
-- Delete a page from the page menu when you are done with it.
-- **Shot** captures the whole screen and stores it in the notebook.
-- **OCR** captures the saved fixed region, runs OCR, and stores the recognized text as an editable notebook entry.
-- OCR text entries can be corrected in place when recognition is inaccurate.
-- Swipe a screenshot or OCR entry sideways to delete it.
+## What Matters
 
-**Dictionary page** keeps English word lookup available for moments when a word is hard to remember. Type an English word manually, then ThorNotes shows offline definitions, examples, and synonyms from Open English WordNet 2024.
+- **Shot** captures the current screen and stores a JPEG in the active notebook page.
+- **OCR** captures a saved region, runs ML Kit text recognition, and stores editable text.
+- Notebook pages are separate streams. The last opened page is remembered.
+- The thumbnail rail jumps directly to screenshots or OCR text blocks.
+- Dictionary lookup is offline, backed by a bundled Open English WordNet SQLite database.
 
-**Custom OCR region** lets you select a dialogue box or text area once, then reuse it for OCR. Tap Set Region the first time, or long-press OCR to modify it later. Full screenshots always capture the whole screen.
+## Storage Model
 
-## Tech Stack
+Notebook data is stored in app-private internal storage, not public internal storage and not the SD card.
 
-- Kotlin + Jetpack Compose
-- MediaProjection API with a foreground service for screen capture
-- ML Kit Text Recognition v2 for OCR
-- SQLite English dictionary generated from Open English WordNet 2024
-- SharedPreferences for settings
-- App-private file storage for notebook screenshots and metadata
+Runtime paths on device:
 
-## Setup
+```text
+/data/user/0/com.thornotes/
+├── files/
+│   ├── notebook/
+│   │   ├── pages.json
+│   │   └── pages/<page-id>/
+│   │       ├── entries.json
+│   │       └── images/<entry-id>.jpg
+│   └── english_dictionary.db
+└── shared_prefs/
+    ├── thornotes_prefs.xml
+    └── notebook.xml
+```
 
-### Requirements
+The important backup target is `files/notebook`. It contains page metadata, entry order, OCR text, and screenshot files. Screenshot paths in `entries.json` are relative to `files/notebook`, so the notebook directory is self-contained. Shared preferences only hold UI/settings state such as text size, OCR crop region, and last opened notebook page. `english_dictionary.db` is copied from the APK asset and does not need to be backed up.
 
-- Android SDK, compileSdk 35
-- JDK 17 recommended for the current Gradle/Kotlin toolchain
+Uninstalling the app deletes this internal data. Android may include it in system app backup because `allowBackup=true`, but that is device/account dependent and should not be treated as the main backup path.
 
-### Build
+## Backup And Restore
+
+For debug builds, `adb run-as` can read the app-private directory:
+
+```bash
+adb exec-out run-as com.thornotes tar -C /data/user/0/com.thornotes -cf - files/notebook shared_prefs/thornotes_prefs.xml shared_prefs/notebook.xml > thornotes-backup.tar
+```
+
+Restore into an installed debug build:
+
+```bash
+adb shell run-as com.thornotes sh -c 'cd /data/user/0/com.thornotes && tar -xf -' < thornotes-backup.tar
+```
+
+If `run-as` says the package is not debuggable, Android is blocking shell access to private app data. At that point the practical options are root access, Android's own backup/restore, or adding an in-app export/import flow that writes a zip to a public picker location.
+
+## Capture Cost
+
+Android says "start recording or casting" because MediaProjection has one generic permission prompt. ThorNotes uses it for still captures.
+
+Each Shot/OCR creates a temporary `VirtualDisplay` and `ImageReader`, grabs one RGBA frame, then releases them. The MediaProjection session remains alive so repeated captures do not ask for permission again.
+
+Idle after permission should be low CPU/GPU. Shot briefly uses GPU/compositor work plus JPEG compression. OCR adds bitmap crop work and ML Kit inference, so it is the heavier path. Browsing pages with many screenshots mainly costs RAM and bitmap decode time.
+
+## Build
 
 ```bash
 echo "sdk.dir=$HOME/Android/sdk" > local.properties
 JAVA_HOME=/usr/lib/jvm/java-17-openjdk ./gradlew installDebug
 ```
 
-Adjust `sdk.dir` and `JAVA_HOME` for your machine.
+Requires Android SDK compileSdk 35 and JDK 17.
 
-## Project Structure
+## Tech Notes
 
-```text
-app/src/main/java/com/kanjilens/
-├── MainActivity.kt
-├── capture/
-│   ├── ScreenCaptureManager.kt
-│   └── ScreenCaptureService.kt
-├── data/
-│   ├── NotebookRepository.kt
-│   └── models/
-│       ├── AppSettings.kt
-│       ├── CaptureState.kt
-│       └── NotebookEntry.kt
-├── ocr/
-│   └── TextRecognizer.kt
-├── analysis/
-│   └── EnglishDictionaryLookup.kt
-└── ui/
-    ├── screens/
-    │   ├── MainScreen.kt
-    │   ├── CropScreen.kt
-    │   ├── SettingsScreen.kt
-    │   └── HelpScreen.kt
-    ├── components/
-    │   └── DictionaryResultView.kt
-    └── theme/
-        └── Theme.kt
-```
+- Kotlin + Jetpack Compose
+- MediaProjection foreground service for screen capture
+- ML Kit Text Recognition v2
+- Gson JSON metadata for notebook pages and entries
+- SQLite dictionary copied from `app/src/main/assets`
 
 ## License
 

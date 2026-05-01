@@ -1,4 +1,4 @@
-package com.kanjilens
+package com.thornotes
 
 import android.graphics.Bitmap
 import android.os.Bundle
@@ -10,17 +10,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import com.kanjilens.analysis.EnglishDictionaryLookup
-import com.kanjilens.capture.ScreenCaptureManager
-import com.kanjilens.data.NotebookRepository
-import com.kanjilens.data.models.AppSettings
-import com.kanjilens.data.models.CaptureState
-import com.kanjilens.ocr.TextRecognizer
-import com.kanjilens.ui.screens.CropScreen
-import com.kanjilens.ui.screens.HelpScreen
-import com.kanjilens.ui.screens.MainScreen
-import com.kanjilens.ui.screens.SettingsScreen
-import com.kanjilens.ui.theme.KanjiLensTheme
+import com.thornotes.analysis.EnglishDictionaryLookup
+import com.thornotes.capture.ScreenCaptureManager
+import com.thornotes.data.NotebookRepository
+import com.thornotes.data.models.AppSettings
+import com.thornotes.data.models.CaptureState
+import com.thornotes.ocr.TextRecognizer
+import com.thornotes.ui.screens.CropScreen
+import com.thornotes.ui.screens.HelpScreen
+import com.thornotes.ui.screens.MainScreen
+import com.thornotes.ui.screens.SettingsScreen
+import com.thornotes.ui.theme.ThorNotesTheme
 
 class MainActivity : ComponentActivity() {
 
@@ -47,7 +47,7 @@ class MainActivity : ComponentActivity() {
         notebook = NotebookRepository(this)
         enableEdgeToEdge()
         setContent {
-            KanjiLensTheme {
+            ThorNotesTheme {
                 var currentScreen by remember { mutableStateOf("main") }
                 var captureState by remember { mutableStateOf<CaptureState>(CaptureState.Idle) }
                 var cropScreenshot by remember { mutableStateOf<Bitmap?>(null) }

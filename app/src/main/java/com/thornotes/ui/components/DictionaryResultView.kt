@@ -1,4 +1,4 @@
-package com.kanjilens.ui.components
+package com.thornotes.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -15,8 +15,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.kanjilens.data.models.AppSettings
-import com.kanjilens.data.models.EnglishDictionaryEntry
+import com.thornotes.data.models.AppSettings
+import com.thornotes.data.models.EnglishDictionaryEntry
 
 @Composable
 fun DictionaryResultView(

@@ -1,4 +1,4 @@
-package com.kanjilens.ui.theme
+package com.thornotes.ui.theme
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
@@ -18,7 +18,7 @@ private val DarkColorScheme = darkColorScheme(
 )
 
 @Composable
-fun KanjiLensTheme(content: @Composable () -> Unit) {
+fun ThorNotesTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = DarkColorScheme,
         content = content

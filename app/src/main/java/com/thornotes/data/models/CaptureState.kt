@@ -1,4 +1,4 @@
-package com.kanjilens.data.models
+package com.thornotes.data.models
 
 sealed class CaptureState {
     data object Idle : CaptureState()

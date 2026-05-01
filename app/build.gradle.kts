@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.kanjilens"
+    namespace = "com.thornotes"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.kanjilens"
+        applicationId = "com.thornotes"
         minSdk = 26
         targetSdk = 35
         versionCode = 2
@@ -73,7 +73,8 @@ dependencies {
     // Gson - JSON parsing for dictionary result fields
     implementation("com.google.code.gson:gson:2.11.0")
 
-    // Room - SQLite for JMDict (Phase 4)
+    // Room is not currently used. Keep this here only if notebook storage moves
+    // from JSON files to SQLite.
     // implementation("androidx.room:room-runtime:2.6.1")
     // implementation("androidx.room:room-ktx:2.6.1")
     // ksp("androidx.room:room-compiler:2.6.1")

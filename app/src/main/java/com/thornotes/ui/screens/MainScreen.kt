@@ -1,4 +1,4 @@
-package com.kanjilens.ui.screens
+package com.thornotes.ui.screens
 
 import android.app.Activity
 import android.content.Intent
@@ -66,18 +66,18 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import com.kanjilens.analysis.EnglishDictionaryLookup
-import com.kanjilens.capture.ScreenCaptureManager
-import com.kanjilens.capture.ScreenCaptureService
-import com.kanjilens.data.NotebookRepository
-import com.kanjilens.data.models.AppSettings
-import com.kanjilens.data.models.CaptureState
-import com.kanjilens.data.models.EnglishDictionaryEntry
-import com.kanjilens.data.models.NotebookEntry
-import com.kanjilens.data.models.NotebookEntryType
-import com.kanjilens.data.models.NotebookPageInfo
-import com.kanjilens.ocr.TextRecognizer
-import com.kanjilens.ui.components.DictionaryResultView
+import com.thornotes.analysis.EnglishDictionaryLookup
+import com.thornotes.capture.ScreenCaptureManager
+import com.thornotes.capture.ScreenCaptureService
+import com.thornotes.data.NotebookRepository
+import com.thornotes.data.models.AppSettings
+import com.thornotes.data.models.CaptureState
+import com.thornotes.data.models.EnglishDictionaryEntry
+import com.thornotes.data.models.NotebookEntry
+import com.thornotes.data.models.NotebookEntryType
+import com.thornotes.data.models.NotebookPageInfo
+import com.thornotes.ocr.TextRecognizer
+import com.thornotes.ui.components.DictionaryResultView
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
@@ -276,6 +276,7 @@ fun MainScreen(
                 NotebookPage.NOTEBOOK -> NotebookPageContent(
                     entries = entries,
                     textSize = textSize,
+                    imagePathResolver = notebook::resolveImagePath,
                     onTextChange = notebook::updateText,
                     onDeleteEntry = notebook::deleteEntry,
                     modifier = Modifier.weight(1f),
@@ -411,6 +412,7 @@ private fun ModeIconOption(
 private fun NotebookPageContent(
     entries: List<NotebookEntry>,
     textSize: Int,
+    imagePathResolver: (String?) -> String?,
     onTextChange: (String, String) -> Unit,
     onDeleteEntry: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -432,6 +434,7 @@ private fun NotebookPageContent(
             EntryMinimap(
                 entries = entries,
                 selectedEntryId = highlightedEntryId,
+                imagePathResolver = imagePathResolver,
                 onEntrySelected = { entry ->
                     val index = entries.indexOfFirst { it.id == entry.id }
                     if (index >= 0) {
@@ -467,6 +470,7 @@ private fun NotebookPageContent(
                     NotebookEntryView(
                         entry = entry,
                         textSize = textSize,
+                        imagePathResolver = imagePathResolver,
                         onTextChange = onTextChange,
                         onDelete = {
                             if (selectedPreviewId == it) selectedPreviewId = null
@@ -486,6 +490,7 @@ private fun NotebookPageContent(
 private fun EntryMinimap(
     entries: List<NotebookEntry>,
     selectedEntryId: String?,
+    imagePathResolver: (String?) -> String?,
     onEntrySelected: (NotebookEntry) -> Unit,
 ) {
     LazyRow(
@@ -497,8 +502,9 @@ private fun EntryMinimap(
             key = { _, entry -> entry.id },
         ) { index, entry ->
             val selected = entry.id == selectedEntryId
-            val thumbnail = remember(entry.imagePath) {
-                entry.imagePath?.let { decodeThumbnail(it, maxSize = 180) }
+            val resolvedImagePath = imagePathResolver(entry.imagePath)
+            val thumbnail = remember(resolvedImagePath) {
+                resolvedImagePath?.let { decodeThumbnail(it, maxSize = 180) }
             }
             Box(
                 modifier = Modifier
@@ -834,6 +840,7 @@ private fun formatBytes(bytes: Long): String {
 private fun NotebookEntryView(
     entry: NotebookEntry,
     textSize: Int,
+    imagePathResolver: (String?) -> String?,
     onTextChange: (String, String) -> Unit,
     onDelete: (String) -> Unit,
 ) {
@@ -879,8 +886,9 @@ private fun NotebookEntryView(
 
         when (entry.type) {
             NotebookEntryType.SCREENSHOT -> {
-                val bitmap = remember(entry.imagePath) {
-                    entry.imagePath?.let { BitmapFactory.decodeFile(it)?.trimHorizontalBlackBars() }
+                val resolvedImagePath = imagePathResolver(entry.imagePath)
+                val bitmap = remember(resolvedImagePath) {
+                    resolvedImagePath?.let { BitmapFactory.decodeFile(it)?.trimHorizontalBlackBars() }
                 }
                 if (bitmap != null) {
                     Image(

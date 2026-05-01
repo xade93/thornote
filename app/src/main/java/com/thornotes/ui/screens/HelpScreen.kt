@@ -1,4 +1,4 @@
-package com.kanjilens.ui.screens
+package com.thornotes.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column

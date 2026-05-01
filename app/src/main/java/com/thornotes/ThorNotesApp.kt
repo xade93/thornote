@@ -1,8 +1,8 @@
-package com.kanjilens
+package com.thornotes
 
 import android.app.Application
 
-class KanjiLensApp : Application() {
+class ThorNotesApp : Application() {
     override fun onCreate() {
         super.onCreate()
     }

@@ -15,5 +15,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "KanjiLens"
+rootProject.name = "ThorNotes"
 include(":app")

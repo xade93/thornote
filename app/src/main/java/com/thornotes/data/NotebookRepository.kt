@@ -1,12 +1,12 @@
-package com.kanjilens.data
+package com.thornotes.data
 
 import android.content.Context
 import android.graphics.Bitmap
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
-import com.kanjilens.data.models.NotebookEntry
-import com.kanjilens.data.models.NotebookEntryType
-import com.kanjilens.data.models.NotebookPageInfo
+import com.thornotes.data.models.NotebookEntry
+import com.thornotes.data.models.NotebookEntryType
+import com.thornotes.data.models.NotebookPageInfo
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.io.File
@@ -99,9 +99,13 @@ class NotebookRepository(private val context: Context) {
                 pageId = pageId,
                 type = NotebookEntryType.SCREENSHOT,
                 createdAt = System.currentTimeMillis(),
-                imagePath = imageFile.absolutePath,
+                imagePath = imageFile.toNotebookRelativePath(),
             )
         )
+    }
+
+    fun resolveImagePath(imagePath: String?): String? {
+        return imagePath?.let { imageFile(it).absolutePath }
     }
 
     fun addOcrText(text: String): NotebookEntry {
@@ -129,7 +133,7 @@ class NotebookRepository(private val context: Context) {
     fun deleteEntry(id: String) {
         val entry = allEntries.firstOrNull { it.id == id } ?: return
         entry.imagePath?.let { path ->
-            val imageFile = File(path)
+            val imageFile = imageFile(path)
             if (imageFile.exists()) imageFile.delete()
         }
         allEntries = allEntries.filterNot { it.id == id }
@@ -217,7 +221,8 @@ class NotebookRepository(private val context: Context) {
             val type = object : TypeToken<List<NotebookEntry>>() {}.type
             val entries: List<NotebookEntry> = gson.fromJson(file.readText(), type) ?: emptyList()
             entries.map { entry ->
-                if (entry.pageId.isBlank()) entry.copy(pageId = pageId) else entry
+                val withPage = if (entry.pageId.isBlank()) entry.copy(pageId = pageId) else entry
+                withPage.copy(imagePath = withPage.imagePath?.toStoredImagePath())
             }
         } catch (_: Exception) {
             emptyList()
@@ -249,6 +254,25 @@ class NotebookRepository(private val context: Context) {
     }
 
     private fun pageDir(pageId: String): File = File(notebookDir, "pages/$pageId")
+
+    private fun imageFile(path: String): File {
+        val file = File(path)
+        return if (file.isAbsolute) file else File(notebookDir, path)
+    }
+
+    private fun String.toStoredImagePath(): String {
+        val file = File(this)
+        return if (file.isAbsolute) file.toNotebookRelativePath() else this
+    }
+
+    private fun File.toNotebookRelativePath(): String {
+        val basePath = notebookDir.absolutePath.trimEnd(File.separatorChar) + File.separator
+        return if (absolutePath.startsWith(basePath)) {
+            absolutePath.removePrefix(basePath)
+        } else {
+            absolutePath
+        }
+    }
 
     private fun entriesFile(pageId: String): File {
         val dir = pageDir(pageId).apply { mkdirs() }

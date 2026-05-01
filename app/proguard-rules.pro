@@ -1,2 +1,1 @@
-# KanjiLens ProGuard Rules
-# Add project specific ProGuard rules here.
+# ThorNotes ProGuard rules.
