@@ -1,8 +1,6 @@
 # ThorNotes
 
-ThorNotes is a bottom-screen notebook for Ayn Thor. The game, novel, or visual novel stays on the top screen; ThorNotes keeps screenshots, OCR notes, and offline English lookup below it.
-
-The design target is low idle cost and fast navigation under many captured entries.
+ThorNotes is a bottom-screen notebook for Ayn Thor. When playing information-heavy games there is a need to save screenshots as quick as possible, ideally OCR them into text, and fetch them quickly when such need occurs. This app achieves it, while aiming to keep resource usage low and workflow smooth.
 
 ## What Matters
 
