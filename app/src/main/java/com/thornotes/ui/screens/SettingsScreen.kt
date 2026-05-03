@@ -39,6 +39,7 @@ fun SettingsScreen(
 ) {
     val textSize by settings.textSize.collectAsState()
     val cropEnabled by settings.cropEnabled.collectAsState()
+    val ocrLanguage by settings.ocrLanguage.collectAsState()
 
     Scaffold(
         topBar = {
@@ -93,6 +94,53 @@ fun SettingsScreen(
                         onClick = { settings.setTextSize(AppSettings.TEXT_SIZE_LARGE) },
                         modifier = Modifier.weight(1f),
                     )
+                }
+            }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+
+            SettingsSection(title = "OCR Language") {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        SettingsOption(
+                            label = "中 + EN",
+                            selected = ocrLanguage == AppSettings.OCR_LANGUAGE_CHINESE_ENGLISH,
+                            onClick = { settings.setOcrLanguage(AppSettings.OCR_LANGUAGE_CHINESE_ENGLISH) },
+                            modifier = Modifier.weight(1f),
+                        )
+                        SettingsOption(
+                            label = "EN",
+                            selected = ocrLanguage == AppSettings.OCR_LANGUAGE_ENGLISH,
+                            onClick = { settings.setOcrLanguage(AppSettings.OCR_LANGUAGE_ENGLISH) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        SettingsOption(
+                            label = "中文",
+                            selected = ocrLanguage == AppSettings.OCR_LANGUAGE_CHINESE,
+                            onClick = { settings.setOcrLanguage(AppSettings.OCR_LANGUAGE_CHINESE) },
+                            modifier = Modifier.weight(1f),
+                        )
+                        SettingsOption(
+                            label = "日本語",
+                            selected = ocrLanguage == AppSettings.OCR_LANGUAGE_JAPANESE,
+                            onClick = { settings.setOcrLanguage(AppSettings.OCR_LANGUAGE_JAPANESE) },
+                            modifier = Modifier.weight(1f),
+                        )
+                        SettingsOption(
+                            label = "All",
+                            selected = ocrLanguage == AppSettings.OCR_LANGUAGE_ALL,
+                            onClick = { settings.setOcrLanguage(AppSettings.OCR_LANGUAGE_ALL) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                 }
             }
 

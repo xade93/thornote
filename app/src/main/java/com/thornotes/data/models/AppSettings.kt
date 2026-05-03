@@ -15,10 +15,17 @@ class AppSettings(context: Context) {
         private const val KEY_CROP_RIGHT = "crop_right"
         private const val KEY_CROP_BOTTOM = "crop_bottom"
         private const val KEY_CROP_ENABLED = "crop_enabled"
+        private const val KEY_OCR_LANGUAGE = "ocr_language"
 
         const val TEXT_SIZE_SMALL = 0
         const val TEXT_SIZE_MEDIUM = 1
         const val TEXT_SIZE_LARGE = 2
+
+        const val OCR_LANGUAGE_CHINESE_ENGLISH = 0
+        const val OCR_LANGUAGE_ENGLISH = 1
+        const val OCR_LANGUAGE_CHINESE = 2
+        const val OCR_LANGUAGE_JAPANESE = 3
+        const val OCR_LANGUAGE_ALL = 4
     }
 
     private val prefs: SharedPreferences =
@@ -29,6 +36,11 @@ class AppSettings(context: Context) {
 
     private val _cropEnabled = MutableStateFlow(prefs.getBoolean(KEY_CROP_ENABLED, false))
     val cropEnabled: StateFlow<Boolean> = _cropEnabled
+
+    private val _ocrLanguage = MutableStateFlow(
+        prefs.getInt(KEY_OCR_LANGUAGE, OCR_LANGUAGE_CHINESE_ENGLISH)
+    )
+    val ocrLanguage: StateFlow<Int> = _ocrLanguage
 
     private val _cropLeft = MutableStateFlow(prefs.getFloat(KEY_CROP_LEFT, 0f))
     private val _cropTop = MutableStateFlow(prefs.getFloat(KEY_CROP_TOP, 0f))
@@ -43,6 +55,11 @@ class AppSettings(context: Context) {
     fun setTextSize(size: Int) {
         _textSize.value = size
         prefs.edit().putInt(KEY_TEXT_SIZE, size).apply()
+    }
+
+    fun setOcrLanguage(language: Int) {
+        _ocrLanguage.value = language
+        prefs.edit().putInt(KEY_OCR_LANGUAGE, language).apply()
     }
 
     fun setCropRegion(left: Float, top: Float, right: Float, bottom: Float) {

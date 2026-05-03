@@ -115,6 +115,7 @@ fun MainScreen(
     val scope = rememberCoroutineScope()
     val textSize by settings.textSize.collectAsState()
     val cropEnabled by settings.cropEnabled.collectAsState()
+    val ocrLanguage by settings.ocrLanguage.collectAsState()
     val pages by notebook.pages.collectAsState()
     val currentPageId by notebook.currentPageId.collectAsState()
     val entries by notebook.entries.collectAsState()
@@ -168,7 +169,7 @@ fun MainScreen(
             }
             onRestoreGameFocus()
             onCaptureStateChange(CaptureState.Processing)
-            val text = textRecognizer.recognizeText(cropBitmap(fullBitmap))
+            val text = textRecognizer.recognizeText(cropBitmap(fullBitmap), ocrLanguage)
             if (text.isNullOrBlank()) {
                 onCaptureStateChange(CaptureState.Error("No text found in selected region"))
                 return@launch

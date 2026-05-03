@@ -69,6 +69,8 @@ dependencies {
 
     // ML Kit - text recognition
     implementation("com.google.mlkit:text-recognition:16.0.1")
+    implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
+    implementation("com.google.mlkit:text-recognition-japanese:16.0.1")
 
     // Gson - JSON parsing for dictionary result fields
     implementation("com.google.code.gson:gson:2.11.0")
