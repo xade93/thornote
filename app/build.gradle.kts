@@ -16,7 +16,13 @@ android {
         versionName = "0.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        ndk {
+            abiFilters += setOf("arm64-v8a", "armeabi-v7a")
+        }
     }
+
+    ndkVersion = "21.1.6352462"
 
     buildTypes {
         release {
@@ -41,9 +47,19 @@ android {
         compose = true
     }
 
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.10.2"
+        }
+    }
+
     packaging {
         resources {
             pickFirsts += setOf("META-INF/CONTRIBUTORS.md", "META-INF/LICENSE.md")
+        }
+        jniLibs {
+            pickFirsts += setOf("**/libc++_shared.so")
         }
     }
 }

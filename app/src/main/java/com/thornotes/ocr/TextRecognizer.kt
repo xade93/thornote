@@ -1,7 +1,11 @@
 package com.thornotes.ocr
 
+import android.content.Context
 import android.graphics.Bitmap
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
+import android.widget.Toast
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.TextRecognizer as MlKitTextRecognizer
@@ -12,7 +16,7 @@ import com.thornotes.data.models.AppSettings
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
-class TextRecognizer {
+class TextRecognizer(context: Context) {
 
     companion object {
         private const val TAG = "ThorNotes"
@@ -27,8 +31,28 @@ class TextRecognizer {
     private val japaneseRecognizer = lazy {
         TextRecognition.getClient(JapaneseTextRecognizerOptions.Builder().build())
     }
+    val paddleOcr = PaddleOcrEngine(context)
+    private var attemptedPaddleDownload = false
+    private var shownPaddleFallbackNotice = false
+    private val appContext = context.applicationContext
 
     suspend fun recognizeText(bitmap: Bitmap, language: Int): String? {
+        if (!paddleOcr.assets.isReady() && !attemptedPaddleDownload) {
+            attemptedPaddleDownload = true
+            paddleOcr.assets.ensureDownloaded()
+        }
+        val paddleText = paddleOcr.recognize(bitmap)
+        if (!paddleText.isNullOrBlank()) {
+            Log.d(TAG, "OCR: Paddle recognized text length=${paddleText.length}")
+            return trimEdgeSymbolLines(paddleText)
+        }
+        if (paddleOcr.assets.isReady() && !shownPaddleFallbackNotice) {
+            shownPaddleFallbackNotice = true
+            Handler(Looper.getMainLooper()).post {
+                Toast.makeText(appContext, "PP-OCRv5 unavailable; using ML Kit fallback", Toast.LENGTH_SHORT).show()
+            }
+        }
+
         val recognizers = when (language) {
             AppSettings.OCR_LANGUAGE_ENGLISH -> listOf(latinRecognizer)
             AppSettings.OCR_LANGUAGE_CHINESE -> listOf(chineseRecognizer.value)
@@ -39,7 +63,7 @@ class TextRecognizer {
         val results = recognizers.mapNotNull { recognizer ->
             recognizeWith(recognizer, bitmap)
         }
-        return mergeResults(results)
+        return mergeResults(results)?.let { trimEdgeSymbolLines(it) }
     }
 
     private suspend fun recognizeWith(recognizer: MlKitTextRecognizer, bitmap: Bitmap): String? = suspendCancellableCoroutine { continuation ->
@@ -96,7 +120,21 @@ class TextRecognizer {
         return seen.joinToString("\n").ifBlank { null }
     }
 
+    private fun trimEdgeSymbolLines(text: String): String? {
+        val lines = text.lineSequence().map { it.trim() }.toList()
+        val contentRange = lines.indices.filter { lines[it].hasLetterOrDigit() }
+        if (contentRange.isEmpty()) return null
+        return lines
+            .subList(contentRange.first(), contentRange.last() + 1)
+            .joinToString("\n")
+            .ifBlank { null }
+    }
+
+    private fun String.hasLetterOrDigit(): Boolean =
+        any { it.isLetterOrDigit() }
+
     fun close() {
+        paddleOcr.close()
         latinRecognizer.close()
         if (chineseRecognizer.isInitialized()) chineseRecognizer.value.close()
         if (japaneseRecognizer.isInitialized()) japaneseRecognizer.value.close()

@@ -21,8 +21,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -30,16 +32,25 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.thornotes.data.models.AppSettings
+import com.thornotes.ocr.TextRecognizer
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     settings: AppSettings,
+    textRecognizer: TextRecognizer,
     onBack: () -> Unit,
 ) {
     val textSize by settings.textSize.collectAsState()
     val cropEnabled by settings.cropEnabled.collectAsState()
     val ocrLanguage by settings.ocrLanguage.collectAsState()
+    val paddleStatus by textRecognizer.paddleOcr.assets.status.collectAsState()
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        textRecognizer.paddleOcr.assets.refresh()
+    }
 
     Scaffold(
         topBar = {
@@ -101,6 +112,12 @@ fun SettingsScreen(
 
             SettingsSection(title = "OCR Language") {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "ThorNotes tries PP-OCRv5 first when installed. If it is missing or fails, OCR falls back to ML Kit with the selected language.",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        lineHeight = 18.sp,
+                    )
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -141,6 +158,45 @@ fun SettingsScreen(
                             modifier = Modifier.weight(1f),
                         )
                     }
+                }
+            }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+
+            SettingsSection(title = "OCR Engine") {
+                Text(
+                    text = paddleStatus.message,
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 20.sp,
+                )
+                SettingsOption(
+                    label = if (paddleStatus.ready) "Refresh" else if (paddleStatus.downloading) "Downloading" else "Download PP-OCRv5",
+                    selected = paddleStatus.ready,
+                    enabled = !paddleStatus.downloading,
+                    onClick = {
+                        scope.launch {
+                            if (paddleStatus.ready) {
+                                textRecognizer.paddleOcr.assets.refresh()
+                            } else {
+                                textRecognizer.paddleOcr.assets.ensureDownloaded()
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (paddleStatus.ready) {
+                    SettingsOption(
+                        label = "Uninstall PP-OCRv5",
+                        selected = false,
+                        enabled = !paddleStatus.downloading,
+                        onClick = {
+                            scope.launch {
+                                textRecognizer.paddleOcr.assets.uninstall()
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 }
             }
 
@@ -197,6 +253,7 @@ private fun SettingsOption(
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
 ) {
     Box(
         modifier = modifier
@@ -205,7 +262,7 @@ private fun SettingsOption(
                 if (selected) MaterialTheme.colorScheme.primary
                 else MaterialTheme.colorScheme.surfaceVariant
             )
-            .clickable { onClick() }
+            .clickable(enabled = enabled) { onClick() }
             .padding(vertical = 12.dp),
         contentAlignment = Alignment.Center,
     ) {

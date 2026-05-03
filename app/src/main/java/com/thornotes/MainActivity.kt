@@ -52,7 +52,7 @@ class MainActivity : ComponentActivity() {
             },
         )
         captureManager = ScreenCaptureManager(this)
-        textRecognizer = TextRecognizer()
+        textRecognizer = TextRecognizer(this)
         dictionary = EnglishDictionaryLookup(this)
         settings = AppSettings(this)
         notebook = NotebookRepository(this)
@@ -66,6 +66,7 @@ class MainActivity : ComponentActivity() {
                 when (currentScreen) {
                     "settings" -> SettingsScreen(
                         settings = settings,
+                        textRecognizer = textRecognizer,
                         onBack = { currentScreen = "main" },
                     )
                     "help" -> HelpScreen(
