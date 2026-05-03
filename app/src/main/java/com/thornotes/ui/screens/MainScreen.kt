@@ -371,6 +371,16 @@ private fun TopModeSwitch(
     currentPage: NotebookPage,
     onPageChange: (NotebookPage) -> Unit,
 ) {
+    val togglePage = {
+        onPageChange(
+            if (currentPage == NotebookPage.NOTEBOOK) {
+                NotebookPage.DICTIONARY
+            } else {
+                NotebookPage.NOTEBOOK
+            }
+        )
+    }
+
     Row(
         modifier = Modifier
             .width(82.dp)
@@ -380,13 +390,13 @@ private fun TopModeSwitch(
         ModeIconOption(
             label = "\u25a4",
             selected = currentPage == NotebookPage.NOTEBOOK,
-            onClick = { onPageChange(NotebookPage.NOTEBOOK) },
+            onClick = togglePage,
             modifier = Modifier.weight(1f),
         )
         ModeIconOption(
             label = "Aa",
             selected = currentPage == NotebookPage.DICTIONARY,
-            onClick = { onPageChange(NotebookPage.DICTIONARY) },
+            onClick = togglePage,
             modifier = Modifier.weight(1f),
         )
     }
@@ -549,7 +559,16 @@ private fun EntryMinimap(
     onEntrySelected: (NotebookEntry) -> Unit,
     onToggleStar: (String) -> Unit,
 ) {
+    val railState = rememberLazyListState()
+
+    LaunchedEffect(entries.firstOrNull()?.id) {
+        if (entries.isNotEmpty()) {
+            railState.animateScrollToItem(0)
+        }
+    }
+
     LazyRow(
+        state = railState,
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
