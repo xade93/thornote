@@ -2,6 +2,12 @@ package com.thornotes
 
 import android.graphics.Bitmap
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.util.DisplayMetrics
+import android.util.Log
+import android.view.MotionEvent
+import android.view.WindowManager
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -24,11 +30,16 @@ import com.thornotes.ui.theme.ThorNotesTheme
 
 class MainActivity : ComponentActivity() {
 
+    companion object {
+        private const val TAG = "ThorNotes"
+    }
+
     lateinit var captureManager: ScreenCaptureManager
     lateinit var textRecognizer: TextRecognizer
     lateinit var dictionary: EnglishDictionaryLookup
     lateinit var settings: AppSettings
     lateinit var notebook: NotebookRepository
+    private var releasedInputFocus = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -82,6 +93,7 @@ class MainActivity : ComponentActivity() {
                         captureState = captureState,
                         onCaptureStateChange = { captureState = it },
                         onSettingsClick = { currentScreen = "settings" },
+                        onRestoreGameFocus = ::restoreGameFocus,
                         onCropClick = { bitmap ->
                             cropScreenshot = bitmap
                             currentScreen = "crop"
@@ -89,6 +101,54 @@ class MainActivity : ComponentActivity() {
                     )
                 }
             }
+        }
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (releasedInputFocus && ev.actionMasked == MotionEvent.ACTION_DOWN) {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
+            releasedInputFocus = false
+        }
+        return super.dispatchTouchEvent(ev)
+    }
+
+    private fun restoreGameFocus() {
+        currentFocus?.clearFocus()
+        window.addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
+        releasedInputFocus = true
+        Handler(Looper.getMainLooper()).postDelayed({
+            tapTopDisplay()
+        }, 120L)
+    }
+
+    private fun tapTopDisplay() {
+        val metrics = DisplayMetrics()
+        @Suppress("DEPRECATION")
+        windowManager.defaultDisplay.getRealMetrics(metrics)
+        val x = metrics.widthPixels / 2
+        val y = (metrics.heightPixels * 0.08f).toInt().coerceAtLeast(1)
+
+        Thread {
+            val commands = listOf(
+                listOf("/system/bin/input", "-d", "0", "tap", x.toString(), y.toString()),
+                listOf("/system/bin/input", "tap", x.toString(), y.toString()),
+            )
+            for (command in commands) {
+                if (runInputCommand(command)) return@Thread
+            }
+            Log.w(TAG, "Unable to restore top display focus with input tap")
+        }.start()
+    }
+
+    private fun runInputCommand(command: List<String>): Boolean {
+        return try {
+            val process = ProcessBuilder(command)
+                .redirectErrorStream(true)
+                .start()
+            process.waitFor() == 0
+        } catch (e: Exception) {
+            Log.w(TAG, "Input command failed: ${command.joinToString(" ")}", e)
+            false
         }
     }
 

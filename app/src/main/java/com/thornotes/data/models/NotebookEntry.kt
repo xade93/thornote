@@ -7,6 +7,7 @@ data class NotebookEntry(
     val createdAt: Long,
     val text: String = "",
     val imagePath: String? = null,
+    val isStarred: Boolean = false,
 )
 
 data class NotebookPageInfo(

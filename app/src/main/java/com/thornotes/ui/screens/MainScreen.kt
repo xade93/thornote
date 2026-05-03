@@ -54,6 +54,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -94,6 +95,8 @@ private enum class PendingCapture {
     CROP,
 }
 
+private val StarBorderColor = Color(0xFFFFC107)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
@@ -105,6 +108,7 @@ fun MainScreen(
     captureState: CaptureState,
     onCaptureStateChange: (CaptureState) -> Unit,
     onSettingsClick: () -> Unit,
+    onRestoreGameFocus: () -> Unit = {},
     onCropClick: (Bitmap) -> Unit = {},
 ) {
     val context = LocalContext.current
@@ -144,10 +148,12 @@ fun MainScreen(
             val bitmap = captureManager.captureScreen()
             if (bitmap == null) {
                 onCaptureStateChange(CaptureState.Error("Failed to capture screen"))
+                onRestoreGameFocus()
                 return@launch
             }
             notebook.addScreenshot(bitmap)
             onCaptureStateChange(CaptureState.Idle)
+            onRestoreGameFocus()
         }
     }
 
@@ -157,8 +163,10 @@ fun MainScreen(
             val fullBitmap = captureManager.captureScreen()
             if (fullBitmap == null) {
                 onCaptureStateChange(CaptureState.Error("Failed to capture screen"))
+                onRestoreGameFocus()
                 return@launch
             }
+            onRestoreGameFocus()
             onCaptureStateChange(CaptureState.Processing)
             val text = textRecognizer.recognizeText(cropBitmap(fullBitmap))
             if (text.isNullOrBlank()) {
@@ -178,7 +186,8 @@ fun MainScreen(
     }
 
     fun runPendingCapture() {
-        when (pendingCapture) {
+        val action = pendingCapture
+        when (action) {
             PendingCapture.SCREENSHOT -> captureScreenshotEntry()
             PendingCapture.REGION_OCR -> captureRegionOcrEntry()
             PendingCapture.CROP -> openCropSelector()
@@ -279,6 +288,7 @@ fun MainScreen(
                     textSize = textSize,
                     imagePathResolver = notebook::resolveImagePath,
                     onTextChange = notebook::updateText,
+                    onToggleStar = notebook::toggleStar,
                     onDeleteEntry = notebook::deleteEntry,
                     modifier = Modifier.weight(1f),
                 )
@@ -417,6 +427,7 @@ private fun NotebookPageContent(
     textSize: Int,
     imagePathResolver: (String?) -> String?,
     onTextChange: (String, String) -> Unit,
+    onToggleStar: (String) -> Unit,
     onDeleteEntry: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -429,6 +440,12 @@ private fun NotebookPageContent(
     val scope = rememberCoroutineScope()
     val screenshotContentOffset = with(LocalDensity.current) { 40.dp.toPx().toInt() }
     var entryPendingDelete by remember { mutableStateOf<NotebookEntry?>(null) }
+
+    LaunchedEffect(entries.firstOrNull()?.id) {
+        val newestEntry = entries.firstOrNull() ?: return@LaunchedEffect
+        selectedPreviewId = newestEntry.id
+        listState.animateScrollToItem(0)
+    }
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -451,6 +468,7 @@ private fun NotebookPageContent(
                         scope.launch { listState.animateScrollToItem(index, scrollOffset) }
                     }
                 },
+                onToggleStar = onToggleStar,
             )
         }
 
@@ -476,6 +494,7 @@ private fun NotebookPageContent(
                         textSize = textSize,
                         imagePathResolver = imagePathResolver,
                         onTextChange = onTextChange,
+                        onToggleStar = onToggleStar,
                         onDelete = {
                             entryPendingDelete = entry
                         },
@@ -528,6 +547,7 @@ private fun EntryMinimap(
     selectedEntryId: String?,
     imagePathResolver: (String?) -> String?,
     onEntrySelected: (NotebookEntry) -> Unit,
+    onToggleStar: (String) -> Unit,
 ) {
     LazyRow(
         modifier = Modifier.fillMaxWidth(),
@@ -549,12 +569,28 @@ private fun EntryMinimap(
                     .clip(RoundedCornerShape(6.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant)
                     .border(
-                        width = if (selected) 2.dp else 1.dp,
-                        color = if (selected) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.outline,
+                        width = when {
+                            entry.isStarred -> 3.dp
+                            selected -> 2.dp
+                            else -> 1.dp
+                        },
+                        color = when {
+                            entry.isStarred -> StarBorderColor
+                            selected -> MaterialTheme.colorScheme.primary
+                            else -> MaterialTheme.colorScheme.outline
+                        },
                         shape = RoundedCornerShape(6.dp),
                     )
-                    .clickable { onEntrySelected(entry) },
+                    .pointerInput(entry.id, entry.type) {
+                        detectTapGestures(
+                            onTap = { onEntrySelected(entry) },
+                            onLongPress = {
+                                if (entry.type == NotebookEntryType.SCREENSHOT) {
+                                    onToggleStar(entry.id)
+                                }
+                            },
+                        )
+                    },
                 contentAlignment = Alignment.Center,
             ) {
                 when (entry.type) {
@@ -951,6 +987,7 @@ private fun NotebookEntryView(
     textSize: Int,
     imagePathResolver: (String?) -> String?,
     onTextChange: (String, String) -> Unit,
+    onToggleStar: (String) -> Unit,
     onDelete: (String) -> Unit,
 ) {
     val time = remember(entry.createdAt) {
@@ -1005,7 +1042,17 @@ private fun NotebookEntryView(
                         contentDescription = "Captured screenshot",
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(6.dp)),
+                            .border(
+                                width = if (entry.isStarred) 3.dp else 0.dp,
+                                color = if (entry.isStarred) StarBorderColor else Color.Transparent,
+                                shape = RoundedCornerShape(6.dp),
+                            )
+                            .clip(RoundedCornerShape(6.dp))
+                            .pointerInput(entry.id) {
+                                detectTapGestures(
+                                    onLongPress = { onToggleStar(entry.id) },
+                                )
+                            },
                         contentScale = ContentScale.FillWidth,
                     )
                 } else {

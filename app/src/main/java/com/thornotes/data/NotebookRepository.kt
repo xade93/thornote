@@ -148,6 +148,23 @@ class NotebookRepository(private val context: Context) {
         refresh()
     }
 
+    fun toggleStar(id: String) {
+        var changed = false
+        allEntries = allEntries.map { entry ->
+            if (entry.id == id && entry.type == NotebookEntryType.SCREENSHOT) {
+                changed = true
+                entry.copy(isStarred = !entry.isStarred)
+            } else {
+                entry
+            }
+        }
+        if (changed) {
+            saveCurrentEntries()
+            touchCurrentPage()
+            refresh()
+        }
+    }
+
     fun deleteEntry(id: String) {
         val entry = allEntries.firstOrNull { it.id == id } ?: return
         entry.imagePath?.let { path ->
