@@ -1,9 +1,14 @@
 package com.thornotes.ui.screens
 
 import android.app.Activity
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.os.BatteryManager
+import android.os.SystemClock
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -38,11 +43,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -79,9 +84,12 @@ import com.thornotes.data.models.NotebookEntryType
 import com.thornotes.data.models.NotebookPageInfo
 import com.thornotes.ocr.TextRecognizer
 import com.thornotes.ui.components.DictionaryResultView
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.DateFormat
+import java.text.SimpleDateFormat
 import java.util.Date
+import java.util.Locale
 
 private enum class NotebookPage {
     NOTEBOOK,
@@ -96,6 +104,8 @@ private enum class PendingCapture {
 }
 
 private val StarBorderColor = Color(0xFFFFC107)
+private val PinBorderColor = Color(0xFF4DD0E1)
+private const val DoubleTapWindowMillis = 300L
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -226,36 +236,20 @@ fun MainScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    NotebookTopBarTitle(
-                        currentPage = currentPage,
-                        pages = pages,
-                        currentNotebookPage = currentNotebookPage,
-                        onPageChange = {
-                            currentPage = it
-                            onCaptureStateChange(CaptureState.Idle)
-                        },
-                        onNotebookPageSelected = notebook::selectPage,
-                        onCreateNotebookPage = notebook::createPage,
-                        onRenameNotebookPage = notebook::renamePage,
-                        onDeleteNotebookPage = notebook::deletePage,
-                    )
-                },
-                actions = {
-                    IconButton(onClick = onSettingsClick) {
-                        Text(
-                            text = "\u2699",
-                            fontSize = 22.sp,
-                            color = MaterialTheme.colorScheme.onBackground,
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    titleContentColor = MaterialTheme.colorScheme.onBackground,
-                ),
-            )
+            Surface(
+                color = MaterialTheme.colorScheme.background,
+                contentColor = MaterialTheme.colorScheme.onBackground,
+            ) {
+                NotebookTopBarTitle(
+                    pages = pages,
+                    currentNotebookPage = currentNotebookPage,
+                    onNotebookPageSelected = notebook::selectPage,
+                    onCreateNotebookPage = notebook::createPage,
+                    onRenameNotebookPage = notebook::renamePage,
+                    onDeleteNotebookPage = notebook::deletePage,
+                    onSettingsClick = onSettingsClick,
+                )
+            }
         },
         bottomBar = {
             if (currentPage == NotebookPage.NOTEBOOK) {
@@ -290,6 +284,7 @@ fun MainScreen(
                     imagePathResolver = notebook::resolveImagePath,
                     onTextChange = notebook::updateText,
                     onToggleStar = notebook::toggleStar,
+                    onTogglePin = notebook::togglePin,
                     onDeleteEntry = notebook::deleteEntry,
                     modifier = Modifier.weight(1f),
                 )
@@ -322,49 +317,128 @@ fun MainScreen(
 
 @Composable
 private fun NotebookTopBarTitle(
-    currentPage: NotebookPage,
     pages: List<NotebookPageInfo>,
     currentNotebookPage: NotebookPageInfo?,
-    onPageChange: (NotebookPage) -> Unit,
     onNotebookPageSelected: (String) -> Unit,
     onCreateNotebookPage: (String) -> Unit,
     onRenameNotebookPage: (String, String) -> Unit,
     onDeleteNotebookPage: (String) -> Unit,
+    onSettingsClick: () -> Unit,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(end = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+            .height(56.dp)
+            .padding(horizontal = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        TopModeSwitch(
-            currentPage = currentPage,
-            onPageChange = onPageChange,
+        TimeStatus()
+
+        NotebookPageSelector(
+            pages = pages,
+            currentPage = currentNotebookPage,
+            onPageSelected = onNotebookPageSelected,
+            onCreatePage = onCreateNotebookPage,
+            onRenamePage = onRenameNotebookPage,
+            onDeletePage = onDeleteNotebookPage,
+            onSettingsClick = onSettingsClick,
+            modifier = Modifier.weight(1f),
         )
 
-        if (currentPage == NotebookPage.NOTEBOOK) {
-            NotebookPageSelector(
-                pages = pages,
-                currentPage = currentNotebookPage,
-                onPageSelected = onNotebookPageSelected,
-                onCreatePage = onCreateNotebookPage,
-                onRenamePage = onRenameNotebookPage,
-                onDeletePage = onDeleteNotebookPage,
-                modifier = Modifier.weight(1f),
-            )
-        } else {
-            Text(
-                text = "Dictionary",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
+        BatteryStatus()
+    }
+}
+
+private data class BatterySnapshot(
+    val level: Int = 100,
+    val charging: Boolean = false,
+)
+
+@Composable
+private fun TimeStatus() {
+    val timeFormat = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
+    var timeText by remember { mutableStateOf(timeFormat.format(Date())) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            timeText = timeFormat.format(Date())
+            delay(15_000)
         }
     }
+
+    Box(
+        modifier = Modifier
+            .width(68.dp)
+            .height(36.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = timeText,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.White,
+            maxLines = 1,
+        )
+    }
+}
+
+@Composable
+private fun BatteryStatus() {
+    val context = LocalContext.current
+    var battery by remember { mutableStateOf(readBatterySnapshot(context)) }
+
+    DisposableEffect(context) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                battery = intent.toBatterySnapshot()
+            }
+        }
+        val filter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
+        val sticky = context.registerReceiver(receiver, filter)
+        battery = sticky.toBatterySnapshot()
+        onDispose {
+            context.unregisterReceiver(receiver)
+        }
+    }
+
+    Row(
+        modifier = Modifier
+            .width(44.dp)
+            .height(36.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "${battery.level}%",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.White,
+            maxLines = 1,
+        )
+    }
+}
+
+private fun readBatterySnapshot(context: Context): BatterySnapshot {
+    val intent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+    return intent.toBatterySnapshot()
+}
+
+private fun Intent?.toBatterySnapshot(): BatterySnapshot {
+    if (this == null) return BatterySnapshot()
+    val level = getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+    val scale = getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+    val status = getIntExtra(BatteryManager.EXTRA_STATUS, -1)
+    val percent = if (level >= 0 && scale > 0) {
+        ((level * 100f) / scale).toInt().coerceIn(0, 100)
+    } else {
+        100
+    }
+    return BatterySnapshot(
+        level = percent,
+        charging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
+            status == BatteryManager.BATTERY_STATUS_FULL,
+    )
 }
 
 @Composable
@@ -439,23 +513,43 @@ private fun NotebookPageContent(
     imagePathResolver: (String?) -> String?,
     onTextChange: (String, String) -> Unit,
     onToggleStar: (String) -> Unit,
+    onTogglePin: (String) -> Unit,
     onDeleteEntry: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
-    val firstVisibleEntryId by remember {
+    val firstVisibleEntryId by remember(entries, listState) {
         derivedStateOf { entries.getOrNull(listState.firstVisibleItemIndex)?.id }
     }
     var selectedPreviewId by remember(entries.firstOrNull()?.pageId) { mutableStateOf<String?>(null) }
+    var pendingScrollEntryId by remember(entries.firstOrNull()?.pageId) { mutableStateOf<String?>(null) }
     val highlightedEntryId = selectedPreviewId ?: firstVisibleEntryId
-    val scope = rememberCoroutineScope()
     val screenshotContentOffset = with(LocalDensity.current) { 40.dp.toPx().toInt() }
     var entryPendingDelete by remember { mutableStateOf<NotebookEntry?>(null) }
 
     LaunchedEffect(entries.firstOrNull()?.id) {
         val newestEntry = entries.firstOrNull() ?: return@LaunchedEffect
         selectedPreviewId = newestEntry.id
-        listState.animateScrollToItem(0)
+        pendingScrollEntryId = null
+        listState.scrollToItem(0)
+    }
+
+    LaunchedEffect(pendingScrollEntryId, entries) {
+        val entryId = pendingScrollEntryId ?: return@LaunchedEffect
+        val index = entries.indexOfFirst { it.id == entryId }
+        if (index < 0) {
+            pendingScrollEntryId = null
+            return@LaunchedEffect
+        }
+
+        val entry = entries[index]
+        val scrollOffset = if (entry.type == NotebookEntryType.SCREENSHOT) {
+            screenshotContentOffset
+        } else {
+            0
+        }
+        listState.scrollToItem(index, scrollOffset)
+        pendingScrollEntryId = null
     }
 
     Column(
@@ -468,18 +562,11 @@ private fun NotebookPageContent(
                 selectedEntryId = highlightedEntryId,
                 imagePathResolver = imagePathResolver,
                 onEntrySelected = { entry ->
-                    val index = entries.indexOfFirst { it.id == entry.id }
-                    if (index >= 0) {
-                        selectedPreviewId = entry.id
-                        val scrollOffset = if (entry.type == NotebookEntryType.SCREENSHOT) {
-                            screenshotContentOffset
-                        } else {
-                            0
-                        }
-                        scope.launch { listState.animateScrollToItem(index, scrollOffset) }
-                    }
+                    selectedPreviewId = entry.id
+                    pendingScrollEntryId = entry.id
                 },
                 onToggleStar = onToggleStar,
+                onTogglePin = onTogglePin,
             )
         }
 
@@ -506,6 +593,7 @@ private fun NotebookPageContent(
                         imagePathResolver = imagePathResolver,
                         onTextChange = onTextChange,
                         onToggleStar = onToggleStar,
+                        onTogglePin = onTogglePin,
                         onDelete = {
                             entryPendingDelete = entry
                         },
@@ -559,11 +647,19 @@ private fun EntryMinimap(
     imagePathResolver: (String?) -> String?,
     onEntrySelected: (NotebookEntry) -> Unit,
     onToggleStar: (String) -> Unit,
+    onTogglePin: (String) -> Unit,
 ) {
     val railState = rememberLazyListState()
+    var lastTapEntryId by remember { mutableStateOf<String?>(null) }
+    var lastTapAt by remember { mutableStateOf(0L) }
+    val railEntries = remember(entries) {
+        val pinned = entries.filter { it.type == NotebookEntryType.SCREENSHOT && it.isPinned }
+        val pinnedIds = pinned.mapTo(mutableSetOf()) { it.id }
+        pinned + entries.filterNot { it.id in pinnedIds }
+    }
 
-    LaunchedEffect(entries.firstOrNull()?.id) {
-        if (entries.isNotEmpty()) {
+    LaunchedEffect(railEntries.firstOrNull()?.id, railEntries.count { it.isPinned }) {
+        if (railEntries.isNotEmpty()) {
             railState.animateScrollToItem(0)
         }
     }
@@ -574,10 +670,11 @@ private fun EntryMinimap(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         itemsIndexed(
-            items = entries,
+            items = railEntries,
             key = { _, entry -> entry.id },
         ) { index, entry ->
             val selected = entry.id == selectedEntryId
+            val originalIndex = entries.indexOfFirst { it.id == entry.id }.takeIf { it >= 0 } ?: index
             val resolvedImagePath = imagePathResolver(entry.imagePath)
             val thumbnail = remember(resolvedImagePath) {
                 resolvedImagePath?.let { decodeThumbnail(it, maxSize = 180) }
@@ -590,11 +687,13 @@ private fun EntryMinimap(
                     .background(MaterialTheme.colorScheme.surfaceVariant)
                     .border(
                         width = when {
+                            entry.isPinned -> 3.dp
                             entry.isStarred -> 3.dp
                             selected -> 2.dp
                             else -> 1.dp
                         },
                         color = when {
+                            entry.isPinned -> PinBorderColor
                             entry.isStarred -> StarBorderColor
                             selected -> MaterialTheme.colorScheme.primary
                             else -> MaterialTheme.colorScheme.outline
@@ -603,7 +702,20 @@ private fun EntryMinimap(
                     )
                     .pointerInput(entry.id, entry.type) {
                         detectTapGestures(
-                            onTap = { onEntrySelected(entry) },
+                            onTap = {
+                                val now = SystemClock.uptimeMillis()
+                                val isDoubleTap = lastTapEntryId == entry.id &&
+                                    now - lastTapAt <= DoubleTapWindowMillis
+                                if (entry.type == NotebookEntryType.SCREENSHOT && isDoubleTap) {
+                                    onTogglePin(entry.id)
+                                    lastTapEntryId = null
+                                    lastTapAt = 0L
+                                } else {
+                                    onEntrySelected(entry)
+                                    lastTapEntryId = entry.id
+                                    lastTapAt = now
+                                }
+                            },
                             onLongPress = {
                                 if (entry.type == NotebookEntryType.SCREENSHOT) {
                                     onToggleStar(entry.id)
@@ -618,7 +730,7 @@ private fun EntryMinimap(
                         if (thumbnail != null) {
                             Image(
                                 bitmap = thumbnail.asImageBitmap(),
-                                contentDescription = "Jump to screenshot ${index + 1}",
+                                contentDescription = "Jump to screenshot ${originalIndex + 1}",
                                 modifier = Modifier.fillMaxSize(),
                                 contentScale = ContentScale.Crop,
                             )
@@ -631,7 +743,7 @@ private fun EntryMinimap(
                         }
                     }
                     NotebookEntryType.OCR_TEXT -> OcrMinimapItem(
-                        index = index,
+                        index = originalIndex,
                         text = entry.text,
                     )
                 }
@@ -734,6 +846,7 @@ private fun NotebookPageSelector(
     onCreatePage: (String) -> Unit,
     onRenamePage: (String, String) -> Unit,
     onDeletePage: (String) -> Unit,
+    onSettingsClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var pageMenuExpanded by remember { mutableStateOf(false) }
@@ -795,6 +908,13 @@ private fun NotebookPageSelector(
                 onClick = {
                     pageMenuExpanded = false
                     creatingPage = true
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("Settings") },
+                onClick = {
+                    pageMenuExpanded = false
+                    onSettingsClick()
                 },
             )
             if (currentPage != null) {
@@ -1008,6 +1128,7 @@ private fun NotebookEntryView(
     imagePathResolver: (String?) -> String?,
     onTextChange: (String, String) -> Unit,
     onToggleStar: (String) -> Unit,
+    onTogglePin: (String) -> Unit,
     onDelete: (String) -> Unit,
 ) {
     val time = remember(entry.createdAt) {
@@ -1019,6 +1140,7 @@ private fun NotebookEntryView(
         else -> 16.sp
     }
     var dragAmount by remember(entry.id) { mutableStateOf(0f) }
+    var lastImageTapAt by remember(entry.id) { mutableStateOf(0L) }
 
     Column(
         modifier = Modifier
@@ -1063,13 +1185,26 @@ private fun NotebookEntryView(
                         modifier = Modifier
                             .fillMaxWidth()
                             .border(
-                                width = if (entry.isStarred) 3.dp else 0.dp,
-                                color = if (entry.isStarred) StarBorderColor else Color.Transparent,
+                                width = if (entry.isPinned || entry.isStarred) 3.dp else 0.dp,
+                                color = when {
+                                    entry.isPinned -> PinBorderColor
+                                    entry.isStarred -> StarBorderColor
+                                    else -> Color.Transparent
+                                },
                                 shape = RoundedCornerShape(6.dp),
                             )
                             .clip(RoundedCornerShape(6.dp))
                             .pointerInput(entry.id) {
                                 detectTapGestures(
+                                    onTap = {
+                                        val now = SystemClock.uptimeMillis()
+                                        if (now - lastImageTapAt <= DoubleTapWindowMillis) {
+                                            onTogglePin(entry.id)
+                                            lastImageTapAt = 0L
+                                        } else {
+                                            lastImageTapAt = now
+                                        }
+                                    },
                                     onLongPress = { onToggleStar(entry.id) },
                                 )
                             },

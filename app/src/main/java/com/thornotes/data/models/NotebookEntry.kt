@@ -8,6 +8,7 @@ data class NotebookEntry(
     val text: String = "",
     val imagePath: String? = null,
     val isStarred: Boolean = false,
+    val isPinned: Boolean = false,
 )
 
 data class NotebookPageInfo(

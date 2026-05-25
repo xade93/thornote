@@ -165,6 +165,23 @@ class NotebookRepository(private val context: Context) {
         }
     }
 
+    fun togglePin(id: String) {
+        var changed = false
+        allEntries = allEntries.map { entry ->
+            if (entry.id == id && entry.type == NotebookEntryType.SCREENSHOT) {
+                changed = true
+                entry.copy(isPinned = !entry.isPinned)
+            } else {
+                entry
+            }
+        }
+        if (changed) {
+            saveCurrentEntries()
+            touchCurrentPage()
+            refresh()
+        }
+    }
+
     fun deleteEntry(id: String) {
         val entry = allEntries.firstOrNull { it.id == id } ?: return
         entry.imagePath?.let { path ->
