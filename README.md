@@ -1,5 +1,5 @@
 # ThorNotes
-<img width="1672" height="941" alt="image" src="https://github.com/user-attachments/assets/f9e41bbb-3182-46d1-8faf-84987af3f4df" />
+<img width="1672" height="941" alt="image" src="https://github.com/user-attachments/assets/c203ab70-8c9a-45ad-8067-fdf8fb76f656" />
 
 ThorNotes is a bottom-screen notebook for Ayn Thor. When playing information-heavy games there is a need to save screenshots as quick as possible, ideally OCR them into text, and fetch them quickly when such need occurs. This app achieves it, while aiming to keep resource usage low and workflow smooth.
 
