@@ -10,6 +10,12 @@ ThorNotes is a bottom-screen notebook for Ayn Thor. When playing information-hea
 - The thumbnail rail jumps directly to screenshots or OCR text blocks.
 - Dictionary lookup is offline, backed by a bundled Open English WordNet SQLite database.
 
+## Display Controls
+
+- Double-tap the time label to cover the bottom screen with solid black for OLED saving. Double-tap the black screen to restore ThorNotes. This is always enabled.
+- Settings -> Display can enable a floating toggle button. Android's "display over other apps" permission is required. The button hides ThorNotes to the background and brings it back without closing the notebook.
+- The floating toggle intentionally uses normal task backgrounding for now. Attempts to remove the system hide/show animation by making the activity transparent, non-touchable, or tiny still blocked touches to the app underneath on-device. A true no-animation, touch-through version would need the ThorNotes UI itself to run as a removable `WindowManager` overlay, which is a larger architecture change.
+
 ## Storage Model
 
 Notebook data is stored in app-private internal storage, not public internal storage and not the SD card.

@@ -1,9 +1,14 @@
 package com.thornotes
 
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Bitmap
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.util.DisplayMetrics
 import android.util.Log
 import android.view.MotionEvent
@@ -13,9 +18,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.core.content.ContextCompat
 import com.thornotes.analysis.EnglishDictionaryLookup
 import com.thornotes.capture.ScreenCaptureManager
 import com.thornotes.data.NotebookRepository
@@ -32,6 +40,7 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         private const val TAG = "ThorNotes"
+        const val ACTION_HIDE_APP = "com.thornotes.ACTION_HIDE_APP"
     }
 
     lateinit var captureManager: ScreenCaptureManager
@@ -40,6 +49,13 @@ class MainActivity : ComponentActivity() {
     lateinit var settings: AppSettings
     lateinit var notebook: NotebookRepository
     private var releasedInputFocus = false
+    private val hideAppReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == ACTION_HIDE_APP) {
+                moveTaskToBack(true)
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -56,12 +72,23 @@ class MainActivity : ComponentActivity() {
         dictionary = EnglishDictionaryLookup(this)
         settings = AppSettings(this)
         notebook = NotebookRepository(this)
+        ContextCompat.registerReceiver(
+            this,
+            hideAppReceiver,
+            IntentFilter(ACTION_HIDE_APP),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
         enableEdgeToEdge()
         setContent {
             ThorNotesTheme {
                 var currentScreen by remember { mutableStateOf("main") }
                 var captureState by remember { mutableStateOf<CaptureState>(CaptureState.Idle) }
                 var cropScreenshot by remember { mutableStateOf<Bitmap?>(null) }
+                val floatingToggleEnabled by settings.floatingToggleEnabled.collectAsState()
+
+                LaunchedEffect(floatingToggleEnabled) {
+                    syncFloatingToggleService()
+                }
 
                 when (currentScreen) {
                     "settings" -> SettingsScreen(
@@ -113,6 +140,25 @@ class MainActivity : ComponentActivity() {
         return super.dispatchTouchEvent(ev)
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        syncFloatingToggleService()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        if (settings.floatingToggleEnabled.value && Settings.canDrawOverlays(this)) {
+            startService(
+                floatingToggleServiceIntent(FloatingToggleService.ACTION_APP_VISIBLE),
+            )
+        }
+    }
+
     private fun restoreGameFocus() {
         currentFocus?.clearFocus()
         window.addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
@@ -155,8 +201,26 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        unregisterReceiver(hideAppReceiver)
         captureManager.release()
         textRecognizer.close()
         dictionary.close()
+    }
+
+    private fun syncFloatingToggleService() {
+        val serviceIntent = floatingToggleServiceIntent()
+        if (settings.floatingToggleEnabled.value && Settings.canDrawOverlays(this)) {
+            startService(serviceIntent)
+        } else {
+            stopService(serviceIntent)
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun floatingToggleServiceIntent(actionName: String? = null): Intent {
+        return Intent(this, FloatingToggleService::class.java).apply {
+            action = actionName
+            putExtra(FloatingToggleService.EXTRA_DISPLAY_ID, windowManager.defaultDisplay.displayId)
+        }
     }
 }

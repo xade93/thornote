@@ -4,6 +4,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <application
         android:name=".ThorNotesApp"
@@ -17,6 +18,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:theme="@style/Theme.ThorNotes">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -27,6 +29,10 @@
         <service
             android:name=".capture.ScreenCaptureService"
             android:foregroundServiceType="mediaProjection"
+            android:exported="false" />
+
+        <service
+            android:name=".FloatingToggleService"
             android:exported="false" />
 
     </application>

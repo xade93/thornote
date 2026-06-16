@@ -16,6 +16,7 @@ class AppSettings(context: Context) {
         private const val KEY_CROP_BOTTOM = "crop_bottom"
         private const val KEY_CROP_ENABLED = "crop_enabled"
         private const val KEY_OCR_LANGUAGE = "ocr_language"
+        private const val KEY_FLOATING_TOGGLE_ENABLED = "floating_toggle_enabled"
 
         const val TEXT_SIZE_SMALL = 0
         const val TEXT_SIZE_MEDIUM = 1
@@ -41,6 +42,11 @@ class AppSettings(context: Context) {
         prefs.getInt(KEY_OCR_LANGUAGE, OCR_LANGUAGE_CHINESE_ENGLISH)
     )
     val ocrLanguage: StateFlow<Int> = _ocrLanguage
+
+    private val _floatingToggleEnabled = MutableStateFlow(
+        prefs.getBoolean(KEY_FLOATING_TOGGLE_ENABLED, false)
+    )
+    val floatingToggleEnabled: StateFlow<Boolean> = _floatingToggleEnabled
 
     private val _cropLeft = MutableStateFlow(prefs.getFloat(KEY_CROP_LEFT, 0f))
     private val _cropTop = MutableStateFlow(prefs.getFloat(KEY_CROP_TOP, 0f))
@@ -80,5 +86,10 @@ class AppSettings(context: Context) {
     fun clearCropRegion() {
         _cropEnabled.value = false
         prefs.edit().putBoolean(KEY_CROP_ENABLED, false).apply()
+    }
+
+    fun setFloatingToggleEnabled(enabled: Boolean) {
+        _floatingToggleEnabled.value = enabled
+        prefs.edit().putBoolean(KEY_FLOATING_TOGGLE_ENABLED, enabled).apply()
     }
 }

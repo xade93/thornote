@@ -135,6 +135,7 @@ fun MainScreen(
     var dictionaryResult by remember { mutableStateOf<List<EnglishDictionaryEntry>>(emptyList()) }
     var dictionaryInput by remember { mutableStateOf("") }
     var pendingCapture by remember { mutableStateOf(PendingCapture.NONE) }
+    var screenBlackout by remember { mutableStateOf(false) }
     val isProcessing = captureState is CaptureState.Capturing || captureState is CaptureState.Processing
 
     LaunchedEffect(captureState) {
@@ -234,83 +235,97 @@ fun MainScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            Surface(
-                color = MaterialTheme.colorScheme.background,
-                contentColor = MaterialTheme.colorScheme.onBackground,
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            topBar = {
+                Surface(
+                    color = MaterialTheme.colorScheme.background,
+                    contentColor = MaterialTheme.colorScheme.onBackground,
+                ) {
+                    NotebookTopBarTitle(
+                        pages = pages,
+                        currentNotebookPage = currentNotebookPage,
+                        onNotebookPageSelected = notebook::selectPage,
+                        onCreateNotebookPage = notebook::createPage,
+                        onRenameNotebookPage = notebook::renamePage,
+                        onDeleteNotebookPage = notebook::deletePage,
+                        onSettingsClick = onSettingsClick,
+                        onTimeDoubleTap = { screenBlackout = true },
+                    )
+                }
+            },
+            bottomBar = {
+                if (currentPage == NotebookPage.NOTEBOOK) {
+                    CompactCaptureBar(
+                        cropEnabled = cropEnabled,
+                        isProcessing = isProcessing,
+                        onScreenshotClick = { requestCapture(PendingCapture.SCREENSHOT) },
+                        onOcrClick = {
+                            if (cropEnabled) {
+                                requestCapture(PendingCapture.REGION_OCR)
+                            } else {
+                                requestCapture(PendingCapture.CROP)
+                            }
+                        },
+                        onEditRegionClick = { requestCapture(PendingCapture.CROP) },
+                    )
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.background,
+        ) { padding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                NotebookTopBarTitle(
-                    pages = pages,
-                    currentNotebookPage = currentNotebookPage,
-                    onNotebookPageSelected = notebook::selectPage,
-                    onCreateNotebookPage = notebook::createPage,
-                    onRenameNotebookPage = notebook::renamePage,
-                    onDeleteNotebookPage = notebook::deletePage,
-                    onSettingsClick = onSettingsClick,
-                )
+                when (currentPage) {
+                    NotebookPage.NOTEBOOK -> NotebookPageContent(
+                        entries = entries,
+                        textSize = textSize,
+                        imagePathResolver = notebook::resolveImagePath,
+                        onTextChange = notebook::updateText,
+                        onToggleStar = notebook::toggleStar,
+                        onTogglePin = notebook::togglePin,
+                        onDeleteEntry = notebook::deleteEntry,
+                        modifier = Modifier.weight(1f),
+                    )
+                    NotebookPage.DICTIONARY -> DictionaryPageContent(
+                        input = dictionaryInput,
+                        result = dictionaryResult,
+                        textSize = textSize,
+                        onInputChange = {
+                            dictionaryInput = it
+                            if (it.isBlank()) {
+                                dictionaryResult = emptyList()
+                                onCaptureStateChange(CaptureState.Idle)
+                            }
+                        },
+                        onLookupClick = {
+                            val text = dictionaryInput.trim()
+                            if (text.isBlank()) {
+                                onCaptureStateChange(CaptureState.Error("Enter text to look up"))
+                            } else {
+                                dictionaryResult = dictionary.lookup(text)
+                                onCaptureStateChange(CaptureState.Idle)
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
-        },
-        bottomBar = {
-            if (currentPage == NotebookPage.NOTEBOOK) {
-                CompactCaptureBar(
-                    cropEnabled = cropEnabled,
-                    isProcessing = isProcessing,
-                    onScreenshotClick = { requestCapture(PendingCapture.SCREENSHOT) },
-                    onOcrClick = {
-                        if (cropEnabled) {
-                            requestCapture(PendingCapture.REGION_OCR)
-                        } else {
-                            requestCapture(PendingCapture.CROP)
-                        }
+        }
+
+        if (screenBlackout) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black)
+                    .pointerInput(Unit) {
+                        detectTapGestures(onDoubleTap = { screenBlackout = false })
                     },
-                    onEditRegionClick = { requestCapture(PendingCapture.CROP) },
-                )
-            }
-        },
-        containerColor = MaterialTheme.colorScheme.background,
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            when (currentPage) {
-                NotebookPage.NOTEBOOK -> NotebookPageContent(
-                    entries = entries,
-                    textSize = textSize,
-                    imagePathResolver = notebook::resolveImagePath,
-                    onTextChange = notebook::updateText,
-                    onToggleStar = notebook::toggleStar,
-                    onTogglePin = notebook::togglePin,
-                    onDeleteEntry = notebook::deleteEntry,
-                    modifier = Modifier.weight(1f),
-                )
-                NotebookPage.DICTIONARY -> DictionaryPageContent(
-                    input = dictionaryInput,
-                    result = dictionaryResult,
-                    textSize = textSize,
-                    onInputChange = {
-                        dictionaryInput = it
-                        if (it.isBlank()) {
-                            dictionaryResult = emptyList()
-                            onCaptureStateChange(CaptureState.Idle)
-                        }
-                    },
-                    onLookupClick = {
-                        val text = dictionaryInput.trim()
-                        if (text.isBlank()) {
-                            onCaptureStateChange(CaptureState.Error("Enter text to look up"))
-                        } else {
-                            dictionaryResult = dictionary.lookup(text)
-                            onCaptureStateChange(CaptureState.Idle)
-                        }
-                    },
-                    modifier = Modifier.weight(1f),
-                )
-            }
+            )
         }
     }
 }
@@ -324,6 +339,7 @@ private fun NotebookTopBarTitle(
     onRenameNotebookPage: (String, String) -> Unit,
     onDeleteNotebookPage: (String) -> Unit,
     onSettingsClick: () -> Unit,
+    onTimeDoubleTap: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -333,7 +349,7 @@ private fun NotebookTopBarTitle(
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        TimeStatus()
+        TimeStatus(onDoubleTap = onTimeDoubleTap)
 
         NotebookPageSelector(
             pages = pages,
@@ -356,7 +372,7 @@ private data class BatterySnapshot(
 )
 
 @Composable
-private fun TimeStatus() {
+private fun TimeStatus(onDoubleTap: () -> Unit) {
     val timeFormat = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
     var timeText by remember { mutableStateOf(timeFormat.format(Date())) }
 
@@ -370,7 +386,10 @@ private fun TimeStatus() {
     Box(
         modifier = Modifier
             .width(68.dp)
-            .height(36.dp),
+            .height(36.dp)
+            .pointerInput(Unit) {
+                detectTapGestures(onDoubleTap = { onDoubleTap() })
+            },
         contentAlignment = Alignment.Center,
     ) {
         Text(

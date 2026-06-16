@@ -1,5 +1,8 @@
 package com.thornotes.ui.screens
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -28,6 +31,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -45,7 +49,9 @@ fun SettingsScreen(
     val textSize by settings.textSize.collectAsState()
     val cropEnabled by settings.cropEnabled.collectAsState()
     val ocrLanguage by settings.ocrLanguage.collectAsState()
+    val floatingToggleEnabled by settings.floatingToggleEnabled.collectAsState()
     val paddleStatus by textRecognizer.paddleOcr.assets.status.collectAsState()
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
@@ -106,6 +112,28 @@ fun SettingsScreen(
                         modifier = Modifier.weight(1f),
                     )
                 }
+            }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+
+            SettingsSection(title = "Display") {
+                SettingsOption(
+                    label = if (floatingToggleEnabled) "Floating Toggle On" else "Floating Toggle Off",
+                    selected = floatingToggleEnabled,
+                    onClick = {
+                        val enable = !floatingToggleEnabled
+                        settings.setFloatingToggleEnabled(enable)
+                        if (enable && !Settings.canDrawOverlays(context)) {
+                            context.startActivity(
+                                Intent(
+                                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                    Uri.parse("package:${context.packageName}"),
+                                ),
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
 
             HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
