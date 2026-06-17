@@ -45,6 +45,7 @@ fun SettingsScreen(
     settings: AppSettings,
     textRecognizer: TextRecognizer,
     onBack: () -> Unit,
+    onShowWelcome: () -> Unit,
 ) {
     val textSize by settings.textSize.collectAsState()
     val cropEnabled by settings.cropEnabled.collectAsState()
@@ -117,23 +118,31 @@ fun SettingsScreen(
             HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
 
             SettingsSection(title = "Display") {
-                SettingsOption(
-                    label = if (floatingToggleEnabled) "Floating Toggle On" else "Floating Toggle Off",
-                    selected = floatingToggleEnabled,
-                    onClick = {
-                        val enable = !floatingToggleEnabled
-                        settings.setFloatingToggleEnabled(enable)
-                        if (enable && !Settings.canDrawOverlays(context)) {
-                            context.startActivity(
-                                Intent(
-                                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                    Uri.parse("package:${context.packageName}"),
-                                ),
-                            )
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SettingsOption(
+                        label = if (floatingToggleEnabled) "Floating Toggle On" else "Floating Toggle Off",
+                        selected = floatingToggleEnabled,
+                        onClick = {
+                            val enable = !floatingToggleEnabled
+                            settings.setFloatingToggleEnabled(enable)
+                            if (enable && !Settings.canDrawOverlays(context)) {
+                                context.startActivity(
+                                    Intent(
+                                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                        Uri.parse("package:${context.packageName}"),
+                                    ),
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    SettingsOption(
+                        label = "Show Welcome Page",
+                        selected = false,
+                        onClick = onShowWelcome,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             }
 
             HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)

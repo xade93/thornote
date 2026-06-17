@@ -34,6 +34,7 @@ import com.thornotes.ui.screens.CropScreen
 import com.thornotes.ui.screens.HelpScreen
 import com.thornotes.ui.screens.MainScreen
 import com.thornotes.ui.screens.SettingsScreen
+import com.thornotes.ui.screens.WelcomeScreen
 import com.thornotes.ui.theme.ThorNotesTheme
 
 class MainActivity : ComponentActivity() {
@@ -85,16 +86,33 @@ class MainActivity : ComponentActivity() {
                 var captureState by remember { mutableStateOf<CaptureState>(CaptureState.Idle) }
                 var cropScreenshot by remember { mutableStateOf<Bitmap?>(null) }
                 val floatingToggleEnabled by settings.floatingToggleEnabled.collectAsState()
+                val welcomeSeen by settings.welcomeSeen.collectAsState()
+
+                LaunchedEffect(welcomeSeen) {
+                    if (!welcomeSeen && currentScreen == "main") {
+                        currentScreen = "welcome"
+                    }
+                }
 
                 LaunchedEffect(floatingToggleEnabled) {
                     syncFloatingToggleService()
                 }
 
                 when (currentScreen) {
+                    "welcome" -> WelcomeScreen(
+                        onDone = {
+                            settings.markWelcomeSeen()
+                            currentScreen = "main"
+                        },
+                    )
                     "settings" -> SettingsScreen(
                         settings = settings,
                         textRecognizer = textRecognizer,
                         onBack = { currentScreen = "main" },
+                        onShowWelcome = {
+                            settings.resetWelcomeSeen()
+                            currentScreen = "welcome"
+                        },
                     )
                     "help" -> HelpScreen(
                         onBack = { currentScreen = "main" },
