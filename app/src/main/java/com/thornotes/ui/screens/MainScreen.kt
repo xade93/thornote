@@ -9,6 +9,15 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.BatteryManager
 import android.os.SystemClock
+import android.text.Editable
+import android.text.InputType
+import android.text.TextWatcher
+import android.util.TypedValue
+import android.view.Gravity
+import android.view.KeyEvent
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
+import android.widget.EditText
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -61,6 +70,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.layout.ContentScale
@@ -71,6 +81,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.thornotes.analysis.EnglishDictionaryLookup
 import com.thornotes.capture.ScreenCaptureManager
@@ -185,7 +196,7 @@ fun MainScreen(
                 onCaptureStateChange(CaptureState.Error("No text found in selected region"))
                 return@launch
             }
-            notebook.addOcrText(text)
+            notebook.addTextChunk(text)
             onCaptureStateChange(CaptureState.Idle)
         }
     }
@@ -260,6 +271,7 @@ fun MainScreen(
                         cropEnabled = cropEnabled,
                         isProcessing = isProcessing,
                         onScreenshotClick = { requestCapture(PendingCapture.SCREENSHOT) },
+                        onTextClick = { notebook.addTextChunk("") },
                         onOcrClick = {
                             if (cropEnabled) {
                                 requestCapture(PendingCapture.REGION_OCR)
@@ -327,6 +339,7 @@ fun MainScreen(
                     },
             )
         }
+
     }
 }
 
@@ -761,7 +774,7 @@ private fun EntryMinimap(
                             )
                         }
                     }
-                    NotebookEntryType.OCR_TEXT -> OcrMinimapItem(
+                    NotebookEntryType.TEXT_CHUNK -> TextChunkMinimapItem(
                         index = originalIndex,
                         text = entry.text,
                     )
@@ -772,7 +785,7 @@ private fun EntryMinimap(
 }
 
 @Composable
-private fun OcrMinimapItem(
+private fun TextChunkMinimapItem(
     index: Int,
     text: String,
 ) {
@@ -783,7 +796,7 @@ private fun OcrMinimapItem(
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         Text(
-            text = "OCR ${index + 1}",
+            text = "Text ${index + 1}",
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary,
@@ -1060,6 +1073,7 @@ private fun CompactCaptureBar(
     cropEnabled: Boolean,
     isProcessing: Boolean,
     onScreenshotClick: () -> Unit,
+    onTextClick: () -> Unit,
     onOcrClick: () -> Unit,
     onEditRegionClick: () -> Unit,
 ) {
@@ -1074,6 +1088,12 @@ private fun CompactCaptureBar(
             label = "Shot",
             enabled = !isProcessing,
             onClick = onScreenshotClick,
+            modifier = Modifier.weight(1f),
+        )
+        CompactActionButton(
+            label = "Text",
+            enabled = !isProcessing,
+            onClick = onTextClick,
             modifier = Modifier.weight(1f),
         )
         CompactActionButton(
@@ -1131,6 +1151,75 @@ private fun CompactActionButton(
     }
 }
 
+@Composable
+private fun TextChunkEditor(
+    text: String,
+    textSize: androidx.compose.ui.unit.TextUnit,
+    onTextChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val textColor = MaterialTheme.colorScheme.onSurface.toArgb()
+    val hintColor = MaterialTheme.colorScheme.onSurfaceVariant.toArgb()
+    val accentColor = MaterialTheme.colorScheme.primary.toArgb()
+
+    AndroidView(
+        modifier = modifier,
+        factory = { viewContext ->
+            EditText(viewContext).apply {
+                setText(text)
+                hint = "Enter note"
+                setTextColor(textColor)
+                setHintTextColor(hintColor)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, textSize.value)
+                setMinLines(2)
+                gravity = Gravity.TOP or Gravity.START
+                setPadding(0, 0, 0, 0)
+                setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                inputType = InputType.TYPE_CLASS_TEXT or
+                    InputType.TYPE_TEXT_FLAG_MULTI_LINE or
+                    InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+                imeOptions = EditorInfo.IME_ACTION_DONE or
+                    EditorInfo.IME_FLAG_NO_EXTRACT_UI or
+                    EditorInfo.IME_FLAG_NO_FULLSCREEN
+                setOnEditorActionListener { view, actionId, event ->
+                    val isDone = actionId == EditorInfo.IME_ACTION_DONE
+                    val isEnterUp = event?.keyCode == KeyEvent.KEYCODE_ENTER &&
+                        event.action == KeyEvent.ACTION_UP
+                    if (isDone || isEnterUp) {
+                        context.getSystemService(InputMethodManager::class.java)
+                            ?.hideSoftInputFromWindow(view.windowToken, 0)
+                        clearFocus()
+                        true
+                    } else {
+                        false
+                    }
+                }
+                addTextChangedListener(
+                    object : TextWatcher {
+                        override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                        override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                            val updated = s?.toString().orEmpty()
+                            if (updated != text) onTextChange(updated)
+                        }
+                        override fun afterTextChanged(s: Editable?) = Unit
+                    },
+                )
+            }
+        },
+        update = { view ->
+            if (view.text.toString() != text) {
+                view.setText(text)
+                view.setSelection(text.length)
+            }
+            view.setTextColor(textColor)
+            view.setHintTextColor(hintColor)
+            view.highlightColor = accentColor
+            view.setTextSize(TypedValue.COMPLEX_UNIT_SP, textSize.value)
+        },
+    )
+}
+
 private fun formatBytes(bytes: Long): String {
     if (bytes < 1024L) return "$bytes B"
     val kb = bytes / 1024.0
@@ -1185,7 +1274,7 @@ private fun NotebookEntryView(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(
-            text = if (entry.type == NotebookEntryType.SCREENSHOT) "Screenshot - $time" else "OCR Text - $time",
+            text = if (entry.type == NotebookEntryType.SCREENSHOT) "Screenshot - $time" else "Text - $time",
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary,
@@ -1237,19 +1326,13 @@ private fun NotebookEntryView(
                     )
                 }
             }
-            NotebookEntryType.OCR_TEXT -> {
-                OutlinedTextField(
-                    value = entry.text,
-                    onValueChange = { onTextChange(entry.id, it) },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2,
-                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = bodySize),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                    ),
+            NotebookEntryType.TEXT_CHUNK -> {
+                TextChunkEditor(
+                    text = entry.text,
+                    textSize = bodySize,
+                    onTextChange = { onTextChange(entry.id, it) },
+                    modifier = Modifier
+                        .fillMaxWidth(),
                 )
             }
         }

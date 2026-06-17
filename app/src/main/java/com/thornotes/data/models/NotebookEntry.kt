@@ -22,5 +22,5 @@ data class NotebookPageInfo(
 
 enum class NotebookEntryType {
     SCREENSHOT,
-    OCR_TEXT,
+    TEXT_CHUNK,
 }

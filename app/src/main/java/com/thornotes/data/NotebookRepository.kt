@@ -126,13 +126,13 @@ class NotebookRepository(private val context: Context) {
         return imagePath?.let { imageFile(it).absolutePath }
     }
 
-    fun addOcrText(text: String): NotebookEntry {
+    fun addTextChunk(text: String): NotebookEntry {
         val pageId = ensureCurrentPageId()
         return addEntry(
             NotebookEntry(
                 id = UUID.randomUUID().toString(),
                 pageId = pageId,
-                type = NotebookEntryType.OCR_TEXT,
+                type = NotebookEntryType.TEXT_CHUNK,
                 createdAt = System.currentTimeMillis(),
                 text = text,
             )
