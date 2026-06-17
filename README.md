@@ -1,27 +1,41 @@
 # ThorNotes
-<img width="1672" height="941" alt="image" src="https://github.com/user-attachments/assets/c203ab70-8c9a-45ad-8067-fdf8fb76f656" />
 
-ThorNotes is a bottom-screen notebook for Ayn Thor. When playing information-heavy games there is a need to save screenshots as quick as possible, ideally OCR them into text, and fetch them quickly when such need occurs. This app achieves it, while aiming to keep resource usage low and workflow smooth.
+<img width="1672" height="941" alt="ThorNotes screenshot" src="https://github.com/user-attachments/assets/c203ab70-8c9a-45ad-8067-fdf8fb76f656" />
 
-## What Matters
+ThorNotes is a small bottom-screen notebook app made with the Ayn Thor in mind.
 
-- **Shot** captures the current screen and stores a JPEG in the active notebook page.
-- **OCR** captures a saved region, runs ML Kit text recognition, and stores editable text.
-- Notebook pages are separate streams. The last opened page is remembered.
-- The thumbnail rail jumps directly to screenshots or OCR text blocks.
-- Dictionary lookup is offline, backed by a bundled Open English WordNet SQLite database.
+When you play lots of games and switch between them, it is easy to forget what was happening in each one. ThorNotes helps by letting you quickly save in-game screenshots or OCR text from a selected screen region, then browse everything later in a clean bottom-screen interface.
 
-## Display Controls
+It is still rough, but it is already useful for visual novels, detective games, RPGs, and other games where you want to keep track of details, clues, dialogue, names, or memorable moments without leaving the game.
 
-- Double-tap the time label to cover the bottom screen with solid black for OLED saving. Double-tap the black screen to restore ThorNotes. This is always enabled.
-- Settings -> Display can enable a floating toggle button. Android's "display over other apps" permission is required. The button hides ThorNotes to the background and brings it back without closing the notebook.
-- The floating toggle intentionally uses normal task backgrounding for now. Attempts to remove the system hide/show animation by making the activity transparent, non-touchable, or tiny still blocked touches to the app underneath on-device. A true no-animation, touch-through version would need the ThorNotes UI itself to run as a removable `WindowManager` overlay, which is a larger architecture change.
+## Download
 
-## Storage Model
+- GitHub: <https://github.com/xade93/thornote>
+- APK releases: <https://github.com/xade93/thornote/releases/>
 
-Notebook data is stored in app-private internal storage, not public internal storage and not the SD card.
+## Main Features
 
-Runtime paths on device:
+- Save screenshots into notebook pages.
+- OCR a selected screen region and save the recognized text.
+- Keep multiple notebook pages, so different games can have separate notes.
+- Browse saved screenshots with thumbnails for quick jumping.
+- Pin/star important screenshots so they stay easy to find.
+- Double-tap the time to turn the bottom screen black for OLED blackout mode, then double-tap again to restore.
+- Use an optional floating overlay button to hide or restore ThorNotes while playing.
+- Keep notebook data as JSON metadata plus plain image files, so it can be migrated or backed up if needed.
+- Use the offline English dictionary page for quick lookup.
+
+## How It Works
+
+ThorNotes uses Android screen capture permission for still screenshots and OCR. Android describes this as "start recording or casting" because MediaProjection uses one generic permission prompt, but ThorNotes only grabs frames when you press Shot or OCR.
+
+For OCR, ThorNotes can use local PP-OCRv5 assets when available and falls back to ML Kit text recognition. Captured text is saved into the active notebook page, alongside screenshots.
+
+The floating overlay button requires Android's "display over other apps" permission. It hides ThorNotes to the background and brings it back without closing the current notebook.
+
+## Data And Backup
+
+Notebook data is stored in app-private internal storage:
 
 ```text
 /data/user/0/com.thornotes/
@@ -37,11 +51,11 @@ Runtime paths on device:
     └── notebook.xml
 ```
 
-The important backup target is `files/notebook`. It contains page metadata, entry order, OCR text, and screenshot files. Screenshot paths in `entries.json` are relative to `files/notebook`, so the notebook directory is self-contained. Shared preferences only hold UI/settings state such as text size, OCR crop region, and last opened notebook page. `english_dictionary.db` is copied from the APK asset and does not need to be backed up.
+The important backup target is `files/notebook`. It contains page metadata, entry order, OCR text, and screenshot files. Screenshot paths are relative to the notebook folder, so the notebook directory is intended to be self-contained.
 
-Uninstalling the app deletes this internal data. Android may include it in system app backup because `allowBackup=true`, but that is device/account dependent and should not be treated as the main backup path.
+Shared preferences mainly store UI/settings state, such as text size, OCR crop region, and the last opened notebook page. The dictionary database is copied from the APK and does not need to be backed up.
 
-## Backup And Restore
+Uninstalling the app deletes its internal data. Android may include it in system app backup because `allowBackup=true`, but that depends on device/account behavior and should not be treated as the main backup path.
 
 For debug builds, `adb run-as` can read the app-private directory:
 
@@ -55,15 +69,7 @@ Restore into an installed debug build:
 adb shell run-as com.thornotes sh -c 'cd /data/user/0/com.thornotes && tar -xf -' < thornotes-backup.tar
 ```
 
-If `run-as` says the package is not debuggable, Android is blocking shell access to private app data. At that point the practical options are root access, Android's own backup/restore, or adding an in-app export/import flow that writes a zip to a public picker location.
-
-## Capture Cost
-
-Android says "start recording or casting" because MediaProjection has one generic permission prompt. ThorNotes uses it for still captures.
-
-Each Shot/OCR creates a temporary `VirtualDisplay` and `ImageReader`, grabs one RGBA frame, then releases them. The MediaProjection session remains alive so repeated captures do not ask for permission again.
-
-Idle after permission should be low CPU/GPU. Shot briefly uses GPU/compositor work plus JPEG compression. OCR adds bitmap crop work and ML Kit inference, so it is the heavier path. Browsing pages with many screenshots mainly costs RAM and bitmap decode time.
+If `run-as` says the package is not debuggable, Android is blocking shell access to private app data. At that point the practical options are root access, Android's own backup/restore, or adding an in-app export/import flow.
 
 ## Build
 
@@ -74,13 +80,9 @@ JAVA_HOME=/usr/lib/jvm/java-17-openjdk ./gradlew installDebug
 
 Requires Android SDK compileSdk 35 and JDK 17.
 
-## Tech Notes
+## Credits
 
-- Kotlin + Jetpack Compose
-- MediaProjection foreground service for screen capture
-- ML Kit Text Recognition v2
-- Gson JSON metadata for notebook pages and entries
-- SQLite dictionary copied from `app/src/main/assets`
+ThorNotes started from work based on ThorTranslate. Credit to the ThorTranslate author for the initial base.
 
 ## License
 
