@@ -151,7 +151,7 @@ class NotebookRepository(private val context: Context) {
     fun toggleStar(id: String) {
         var changed = false
         allEntries = allEntries.map { entry ->
-            if (entry.id == id && entry.type == NotebookEntryType.SCREENSHOT) {
+            if (entry.id == id) {
                 changed = true
                 entry.copy(isStarred = !entry.isStarred)
             } else {
@@ -168,7 +168,7 @@ class NotebookRepository(private val context: Context) {
     fun togglePin(id: String) {
         var changed = false
         allEntries = allEntries.map { entry ->
-            if (entry.id == id && entry.type == NotebookEntryType.SCREENSHOT) {
+            if (entry.id == id) {
                 changed = true
                 entry.copy(isPinned = !entry.isPinned)
             } else {

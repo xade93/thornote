@@ -685,7 +685,7 @@ private fun EntryMinimap(
     var lastTapEntryId by remember { mutableStateOf<String?>(null) }
     var lastTapAt by remember { mutableStateOf(0L) }
     val railEntries = remember(entries) {
-        val pinned = entries.filter { it.type == NotebookEntryType.SCREENSHOT && it.isPinned }
+        val pinned = entries.filter { it.isPinned }
         val pinnedIds = pinned.mapTo(mutableSetOf()) { it.id }
         pinned + entries.filterNot { it.id in pinnedIds }
     }
@@ -738,7 +738,7 @@ private fun EntryMinimap(
                                 val now = SystemClock.uptimeMillis()
                                 val isDoubleTap = lastTapEntryId == entry.id &&
                                     now - lastTapAt <= DoubleTapWindowMillis
-                                if (entry.type == NotebookEntryType.SCREENSHOT && isDoubleTap) {
+                                if (isDoubleTap) {
                                     onTogglePin(entry.id)
                                     lastTapEntryId = null
                                     lastTapAt = 0L
@@ -749,9 +749,7 @@ private fun EntryMinimap(
                                 }
                             },
                             onLongPress = {
-                                if (entry.type == NotebookEntryType.SCREENSHOT) {
-                                    onToggleStar(entry.id)
-                                }
+                                onToggleStar(entry.id)
                             },
                         )
                     },
@@ -1327,13 +1325,41 @@ private fun NotebookEntryView(
                 }
             }
             NotebookEntryType.TEXT_CHUNK -> {
-                TextChunkEditor(
-                    text = entry.text,
-                    textSize = bodySize,
-                    onTextChange = { onTextChange(entry.id, it) },
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth(),
-                )
+                        .fillMaxWidth()
+                        .border(
+                            width = if (entry.isPinned || entry.isStarred) 3.dp else 0.dp,
+                            color = when {
+                                entry.isPinned -> PinBorderColor
+                                entry.isStarred -> StarBorderColor
+                                else -> Color.Transparent
+                            },
+                            shape = RoundedCornerShape(6.dp),
+                        )
+                        .clip(RoundedCornerShape(6.dp))
+                        .pointerInput(entry.id) {
+                            detectTapGestures(
+                                onTap = {
+                                    val now = SystemClock.uptimeMillis()
+                                    if (now - lastImageTapAt <= DoubleTapWindowMillis) {
+                                        onTogglePin(entry.id)
+                                        lastImageTapAt = 0L
+                                    } else {
+                                        lastImageTapAt = now
+                                    }
+                                },
+                                onLongPress = { onToggleStar(entry.id) },
+                            )
+                        },
+                ) {
+                    TextChunkEditor(
+                        text = entry.text,
+                        textSize = bodySize,
+                        onTextChange = { onTextChange(entry.id, it) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             }
         }
     }
