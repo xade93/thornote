@@ -95,12 +95,15 @@ import com.thornotes.data.models.NotebookEntryType
 import com.thornotes.data.models.NotebookPageInfo
 import com.thornotes.ocr.TextRecognizer
 import com.thornotes.ui.components.DictionaryResultView
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.DateFormat
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
 
 private enum class NotebookPage {
     NOTEBOOK,
@@ -117,6 +120,7 @@ private enum class PendingCapture {
 private val StarBorderColor = Color(0xFFFFC107)
 private val PinBorderColor = Color(0xFF4DD0E1)
 private const val DoubleTapWindowMillis = 300L
+private const val CaptureButtonCooldownMillis = 1_000L
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -147,7 +151,13 @@ fun MainScreen(
     var dictionaryInput by remember { mutableStateOf("") }
     var pendingCapture by remember { mutableStateOf(PendingCapture.NONE) }
     var screenBlackout by remember { mutableStateOf(false) }
+    var lastCaptureRequestAt by remember { mutableStateOf(0L) }
+    val captureRequestInFlight = remember { AtomicBoolean(false) }
     val isProcessing = captureState is CaptureState.Capturing || captureState is CaptureState.Processing
+
+    fun finishCaptureRequest() {
+        captureRequestInFlight.set(false)
+    }
 
     LaunchedEffect(captureState) {
         val error = captureState as? CaptureState.Error ?: return@LaunchedEffect
@@ -167,44 +177,68 @@ fun MainScreen(
 
     fun captureScreenshotEntry() {
         scope.launch {
-            onCaptureStateChange(CaptureState.Capturing)
-            val bitmap = captureManager.captureScreen()
-            if (bitmap == null) {
-                onCaptureStateChange(CaptureState.Error("Failed to capture screen"))
+            try {
+                onCaptureStateChange(CaptureState.Capturing)
+                val bitmap = captureManager.captureScreen()
+                if (bitmap == null) {
+                    onCaptureStateChange(CaptureState.Error("Failed to capture screen"))
+                    onRestoreGameFocus()
+                    return@launch
+                }
+                try {
+                    withContext(Dispatchers.IO) {
+                        notebook.addScreenshot(bitmap)
+                    }
+                } finally {
+                    bitmap.recycle()
+                }
+                onCaptureStateChange(CaptureState.Idle)
                 onRestoreGameFocus()
-                return@launch
+            } finally {
+                finishCaptureRequest()
             }
-            notebook.addScreenshot(bitmap)
-            onCaptureStateChange(CaptureState.Idle)
-            onRestoreGameFocus()
         }
     }
 
     fun captureRegionOcrEntry() {
         scope.launch {
-            onCaptureStateChange(CaptureState.Capturing)
-            val fullBitmap = captureManager.captureScreen()
-            if (fullBitmap == null) {
-                onCaptureStateChange(CaptureState.Error("Failed to capture screen"))
+            try {
+                onCaptureStateChange(CaptureState.Capturing)
+                val fullBitmap = captureManager.captureScreen()
+                if (fullBitmap == null) {
+                    onCaptureStateChange(CaptureState.Error("Failed to capture screen"))
+                    onRestoreGameFocus()
+                    return@launch
+                }
                 onRestoreGameFocus()
-                return@launch
+                onCaptureStateChange(CaptureState.Processing)
+                val ocrBitmap = cropBitmap(fullBitmap)
+                val text = try {
+                    textRecognizer.recognizeText(ocrBitmap, ocrLanguage)
+                } finally {
+                    if (ocrBitmap !== fullBitmap) ocrBitmap.recycle()
+                    fullBitmap.recycle()
+                }
+                if (text.isNullOrBlank()) {
+                    onCaptureStateChange(CaptureState.Error("No text found in selected region"))
+                    return@launch
+                }
+                notebook.addTextChunk(text)
+                onCaptureStateChange(CaptureState.Idle)
+            } finally {
+                finishCaptureRequest()
             }
-            onRestoreGameFocus()
-            onCaptureStateChange(CaptureState.Processing)
-            val text = textRecognizer.recognizeText(cropBitmap(fullBitmap), ocrLanguage)
-            if (text.isNullOrBlank()) {
-                onCaptureStateChange(CaptureState.Error("No text found in selected region"))
-                return@launch
-            }
-            notebook.addTextChunk(text)
-            onCaptureStateChange(CaptureState.Idle)
         }
     }
 
     fun openCropSelector() {
         scope.launch {
-            val bitmap = captureManager.captureScreen()
-            if (bitmap != null) onCropClick(bitmap)
+            try {
+                val bitmap = captureManager.captureScreen()
+                if (bitmap != null) onCropClick(bitmap)
+            } finally {
+                finishCaptureRequest()
+            }
         }
     }
 
@@ -214,7 +248,7 @@ fun MainScreen(
             PendingCapture.SCREENSHOT -> captureScreenshotEntry()
             PendingCapture.REGION_OCR -> captureRegionOcrEntry()
             PendingCapture.CROP -> openCropSelector()
-            PendingCapture.NONE -> Unit
+            PendingCapture.NONE -> finishCaptureRequest()
         }
         pendingCapture = PendingCapture.NONE
     }
@@ -232,11 +266,17 @@ fun MainScreen(
             captureManager.awaitProjectionReady { runPendingCapture() }
         } else {
             pendingCapture = PendingCapture.NONE
+            finishCaptureRequest()
             onCaptureStateChange(CaptureState.Error("Permission denied"))
         }
     }
 
     fun requestCapture(action: PendingCapture) {
+        if (isProcessing) return
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastCaptureRequestAt < CaptureButtonCooldownMillis) return
+        if (!captureRequestInFlight.compareAndSet(false, true)) return
+        lastCaptureRequestAt = now
         pendingCapture = action
         if (captureManager.isReady) {
             runPendingCapture()

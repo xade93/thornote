@@ -9,23 +9,32 @@ import android.media.ImageReader
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.Handler
-import android.os.Looper
+import android.os.HandlerThread
+import android.os.SystemClock
 import android.util.DisplayMetrics
 import android.util.Log
 import android.view.WindowManager
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
 
 class ScreenCaptureManager(private val context: Context) {
 
     companion object {
         private const val TAG = "ThorNotes"
+        private const val CAPTURE_TIMEOUT_MS = 3_000L
+        private const val CAPTURE_COOLDOWN_MS = 1_000L
     }
 
     private var mediaProjection: MediaProjection? = null
     private var virtualDisplay: VirtualDisplay? = null
     private var imageReader: ImageReader? = null
-    private val handler = Handler(Looper.getMainLooper())
+    private val captureThread = HandlerThread("ThorNotesScreenCapture").apply { start() }
+    private val handler = Handler(captureThread.looper)
+    private val captureMutex = Mutex()
+    private var lastCaptureStartedAt = 0L
 
     // Callback for when projection is ready
     private var onProjectionReady: (() -> Unit)? = null
@@ -51,7 +60,33 @@ class ScreenCaptureManager(private val context: Context) {
         }
     }
 
-    suspend fun captureScreen(): Bitmap? = suspendCancellableCoroutine { continuation ->
+    suspend fun captureScreen(): Bitmap? {
+        if (!captureMutex.tryLock()) {
+            Log.w(TAG, "Ignoring overlapping screen capture request")
+            return null
+        }
+
+        return try {
+            val now = SystemClock.elapsedRealtime()
+            if (now - lastCaptureStartedAt < CAPTURE_COOLDOWN_MS) {
+                Log.w(TAG, "Ignoring rapid screen capture request")
+                return null
+            }
+            lastCaptureStartedAt = now
+
+            withTimeoutOrNull(CAPTURE_TIMEOUT_MS) {
+                captureSingleFrame()
+            } ?: run {
+                Log.e(TAG, "Timed out waiting for screen capture")
+                cleanupFrameCapture()
+                null
+            }
+        } finally {
+            captureMutex.unlock()
+        }
+    }
+
+    private suspend fun captureSingleFrame(): Bitmap? = suspendCancellableCoroutine { continuation ->
         val projection = mediaProjection
         if (projection == null) {
             Log.e(TAG, "captureScreen called but mediaProjection is null")
@@ -66,8 +101,10 @@ class ScreenCaptureManager(private val context: Context) {
 
         Log.d(TAG, "Capturing screen: ${width}x${height} @ ${density}dpi")
 
+        cleanupFrameCapture()
+
         // Create ImageReader for single frame capture
-        val reader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
+        val reader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 1)
         imageReader = reader
 
         var captured = false
@@ -78,24 +115,29 @@ class ScreenCaptureManager(private val context: Context) {
                 val image = imgReader.acquireLatestImage()
                 if (image != null) {
                     Log.d(TAG, "Image acquired: ${image.width}x${image.height}")
-                    val bitmap = imageToBitmap(image, width, height)
-                    image.close()
-
-                    // Clean up VirtualDisplay and ImageReader after capture
-                    // Keep MediaProjection alive for next capture
-                    virtualDisplay?.release()
-                    reader.close()
-                    virtualDisplay = null
-                    imageReader = null
-
-                    continuation.resume(bitmap)
+                    var imageClosed = false
+                    fun closeImage() {
+                        if (!imageClosed) {
+                            runCatching { image.close() }
+                                .onFailure { Log.w(TAG, "Failed to close captured image", it) }
+                            imageClosed = true
+                        }
+                    }
+                    try {
+                        val bitmap = imageToBitmap(image, width, height)
+                        closeImage()
+                        cleanupFrameCapture()
+                        if (continuation.isActive) continuation.resume(bitmap)
+                    } catch (e: Throwable) {
+                        Log.e(TAG, "Failed to convert screen capture", e)
+                        closeImage()
+                        cleanupFrameCapture()
+                        if (continuation.isActive) continuation.resume(null)
+                    }
                 } else {
                     Log.e(TAG, "acquireLatestImage returned null")
-                    virtualDisplay?.release()
-                    reader.close()
-                    virtualDisplay = null
-                    imageReader = null
-                    continuation.resume(null)
+                    cleanupFrameCapture()
+                    if (continuation.isActive) continuation.resume(null)
                 }
             }
         }, handler)
@@ -113,26 +155,28 @@ class ScreenCaptureManager(private val context: Context) {
             Log.d(TAG, "VirtualDisplay created")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to create VirtualDisplay", e)
-            reader.close()
-            imageReader = null
-            continuation.resume(null)
+            cleanupFrameCapture()
+            if (continuation.isActive) continuation.resume(null)
         }
 
         continuation.invokeOnCancellation {
-            virtualDisplay?.release()
-            reader.close()
-            virtualDisplay = null
-            imageReader = null
+            cleanupFrameCapture()
         }
     }
 
     fun release() {
-        virtualDisplay?.release()
-        imageReader?.close()
+        cleanupFrameCapture()
         mediaProjection?.stop()
+        mediaProjection = null
+        captureThread.quitSafely()
+    }
+
+    private fun cleanupFrameCapture() {
+        virtualDisplay?.release()
+        imageReader?.setOnImageAvailableListener(null, null)
+        imageReader?.close()
         virtualDisplay = null
         imageReader = null
-        mediaProjection = null
     }
 
     private fun imageToBitmap(image: android.media.Image, width: Int, height: Int): Bitmap {
