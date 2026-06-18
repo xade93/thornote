@@ -88,6 +88,11 @@ class MainActivity : ComponentActivity() {
                 val floatingToggleEnabled by settings.floatingToggleEnabled.collectAsState()
                 val welcomeSeen by settings.welcomeSeen.collectAsState()
 
+                fun clearCropScreenshot() {
+                    cropScreenshot?.recycle()
+                    cropScreenshot = null
+                }
+
                 LaunchedEffect(welcomeSeen) {
                     if (!welcomeSeen && currentScreen == "main") {
                         currentScreen = "welcome"
@@ -123,8 +128,14 @@ class MainActivity : ComponentActivity() {
                             CropScreen(
                                 screenshot = bmp,
                                 settings = settings,
-                                onSave = { currentScreen = "main" },
-                                onCancel = { currentScreen = "main" },
+                                onSave = {
+                                    clearCropScreenshot()
+                                    currentScreen = "main"
+                                },
+                                onCancel = {
+                                    clearCropScreenshot()
+                                    currentScreen = "main"
+                                },
                             )
                         } else {
                             currentScreen = "main"
@@ -141,6 +152,7 @@ class MainActivity : ComponentActivity() {
                         onSettingsClick = { currentScreen = "settings" },
                         onRestoreGameFocus = ::restoreGameFocus,
                         onCropClick = { bitmap ->
+                            clearCropScreenshot()
                             cropScreenshot = bitmap
                             currentScreen = "crop"
                         },

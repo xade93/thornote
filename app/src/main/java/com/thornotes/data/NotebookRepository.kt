@@ -51,6 +51,7 @@ class NotebookRepository(private val context: Context) {
         refresh()
     }
 
+    @Synchronized
     fun selectPage(pageId: String) {
         if (storedPages.any { it.id == pageId }) {
             _currentPageId.value = pageId
@@ -59,6 +60,7 @@ class NotebookRepository(private val context: Context) {
         }
     }
 
+    @Synchronized
     fun createPage(name: String): String {
         val cleanName = name.trim().ifBlank { "Untitled" }
         val page = createStoredPage(cleanName)
@@ -70,6 +72,7 @@ class NotebookRepository(private val context: Context) {
         return page.id
     }
 
+    @Synchronized
     fun renamePage(pageId: String, name: String) {
         val cleanName = name.trim().ifBlank { "Untitled" }
         val now = System.currentTimeMillis()
@@ -88,6 +91,7 @@ class NotebookRepository(private val context: Context) {
         }
     }
 
+    @Synchronized
     fun deletePage(pageId: String) {
         val page = pageDir(pageId)
         if (page.exists()) page.deleteRecursively()
@@ -103,6 +107,7 @@ class NotebookRepository(private val context: Context) {
         refresh()
     }
 
+    @Synchronized
     fun addScreenshot(bitmap: Bitmap): NotebookEntry {
         val pageId = ensureCurrentPageId()
         val id = UUID.randomUUID().toString()
@@ -126,6 +131,7 @@ class NotebookRepository(private val context: Context) {
         return imagePath?.let { imageFile(it).absolutePath }
     }
 
+    @Synchronized
     fun addTextChunk(text: String): NotebookEntry {
         val pageId = ensureCurrentPageId()
         return addEntry(
@@ -139,6 +145,7 @@ class NotebookRepository(private val context: Context) {
         )
     }
 
+    @Synchronized
     fun updateText(id: String, text: String) {
         allEntries = allEntries.map { entry ->
             if (entry.id == id) entry.copy(text = text) else entry
@@ -148,6 +155,7 @@ class NotebookRepository(private val context: Context) {
         refresh()
     }
 
+    @Synchronized
     fun toggleStar(id: String) {
         var changed = false
         allEntries = allEntries.map { entry ->
@@ -165,6 +173,7 @@ class NotebookRepository(private val context: Context) {
         }
     }
 
+    @Synchronized
     fun togglePin(id: String) {
         var changed = false
         allEntries = allEntries.map { entry ->
@@ -182,6 +191,7 @@ class NotebookRepository(private val context: Context) {
         }
     }
 
+    @Synchronized
     fun deleteEntry(id: String) {
         val entry = allEntries.firstOrNull { it.id == id } ?: return
         entry.imagePath?.let { path ->

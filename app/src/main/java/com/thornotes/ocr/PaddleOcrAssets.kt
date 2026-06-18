@@ -4,6 +4,8 @@ import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.InputStream
@@ -38,6 +40,7 @@ class PaddleOcrAssets(private val context: Context) {
 
     private val modelDir = File(context.filesDir, "paddle_ocr/models")
     private val supportDir = File(context.filesDir, "paddle_ocr/support")
+    private val installMutex = Mutex()
 
     private val _status = MutableStateFlow(currentStatus())
     val status: StateFlow<Status> = _status
@@ -53,32 +56,34 @@ class PaddleOcrAssets(private val context: Context) {
     }
 
     suspend fun ensureDownloaded(): Boolean = withContext(Dispatchers.IO) {
-        if (isReady()) {
-            _status.value = currentStatus()
-            return@withContext true
-        }
-
-        _status.value = Status(downloading = true, message = "Downloading PP-OCRv5")
-        try {
-            modelDir.deleteRecursively()
-            modelDir.mkdirs()
-            supportDir.mkdirs()
-            copySupportAsset(CONFIG)
-            copySupportAsset(LABELS)
-            downloadArchive(DET_ARCHIVE, modelDir)
-            downloadArchive(REC_ARCHIVE, modelDir)
-            downloadArchive(CLS_ARCHIVE, modelDir)
-            if (!hasValidModels()) {
-                modelDir.deleteRecursively()
-                _status.value = Status(message = "PP-OCRv5 download incomplete")
-                return@withContext false
+        installMutex.withLock {
+            if (isReady()) {
+                _status.value = currentStatus()
+                return@withLock true
             }
-            _status.value = currentStatus()
-            isReady()
-        } catch (e: Exception) {
-            modelDir.deleteRecursively()
-            _status.value = Status(message = e.message ?: "Download failed")
-            false
+
+            _status.value = Status(downloading = true, message = "Downloading PP-OCRv5")
+            try {
+                modelDir.deleteRecursively()
+                modelDir.mkdirs()
+                supportDir.mkdirs()
+                copySupportAsset(CONFIG)
+                copySupportAsset(LABELS)
+                downloadArchive(DET_ARCHIVE, modelDir)
+                downloadArchive(REC_ARCHIVE, modelDir)
+                downloadArchive(CLS_ARCHIVE, modelDir)
+                if (!hasValidModels()) {
+                    modelDir.deleteRecursively()
+                    _status.value = Status(message = "PP-OCRv5 download incomplete")
+                    return@withLock false
+                }
+                _status.value = currentStatus()
+                isReady()
+            } catch (e: Exception) {
+                modelDir.deleteRecursively()
+                _status.value = Status(message = e.message ?: "Download failed")
+                false
+            }
         }
     }
 
@@ -93,8 +98,10 @@ class PaddleOcrAssets(private val context: Context) {
             File(clsModelPath).length() == CLS_MODEL_SIZE
 
     suspend fun uninstall() = withContext(Dispatchers.IO) {
-        File(context.filesDir, "paddle_ocr").deleteRecursively()
-        _status.value = currentStatus()
+        installMutex.withLock {
+            File(context.filesDir, "paddle_ocr").deleteRecursively()
+            _status.value = currentStatus()
+        }
     }
 
     private fun currentStatus(): Status {

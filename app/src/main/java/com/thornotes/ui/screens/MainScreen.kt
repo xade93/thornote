@@ -64,6 +64,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -1200,12 +1201,21 @@ private fun TextChunkEditor(
     val textColor = MaterialTheme.colorScheme.onSurface.toArgb()
     val hintColor = MaterialTheme.colorScheme.onSurfaceVariant.toArgb()
     val accentColor = MaterialTheme.colorScheme.primary.toArgb()
+    var draftText by remember(text) { mutableStateOf(text) }
+    val latestOnTextChange by rememberUpdatedState(onTextChange)
+
+    LaunchedEffect(draftText, text) {
+        if (draftText != text) {
+            delay(500)
+            latestOnTextChange(draftText)
+        }
+    }
 
     AndroidView(
         modifier = modifier,
         factory = { viewContext ->
             EditText(viewContext).apply {
-                setText(text)
+                setText(draftText)
                 hint = "Enter note"
                 setTextColor(textColor)
                 setHintTextColor(hintColor)
@@ -1238,7 +1248,7 @@ private fun TextChunkEditor(
                         override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
                         override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                             val updated = s?.toString().orEmpty()
-                            if (updated != text) onTextChange(updated)
+                            if (updated != draftText) draftText = updated
                         }
                         override fun afterTextChanged(s: Editable?) = Unit
                     },
@@ -1246,9 +1256,9 @@ private fun TextChunkEditor(
             }
         },
         update = { view ->
-            if (view.text.toString() != text) {
-                view.setText(text)
-                view.setSelection(text.length)
+            if (view.text.toString() != draftText) {
+                view.setText(draftText)
+                view.setSelection(draftText.length)
             }
             view.setTextColor(textColor)
             view.setHintTextColor(hintColor)
@@ -1322,7 +1332,7 @@ private fun NotebookEntryView(
             NotebookEntryType.SCREENSHOT -> {
                 val resolvedImagePath = imagePathResolver(entry.imagePath)
                 val bitmap = remember(resolvedImagePath) {
-                    resolvedImagePath?.let { BitmapFactory.decodeFile(it)?.trimHorizontalBlackBars() }
+                    resolvedImagePath?.let { decodeThumbnail(it, maxSize = 1200) }
                 }
                 if (bitmap != null) {
                     Image(

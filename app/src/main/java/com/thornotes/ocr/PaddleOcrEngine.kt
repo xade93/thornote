@@ -17,22 +17,27 @@ class PaddleOcrEngine(context: Context) {
         .onFailure { Log.w(TAG, "Paddle OCR native library unavailable", it) }
         .getOrNull()
     private var initialized = false
+    private val nativeLock = Any()
 
     suspend fun recognize(bitmap: Bitmap): String? = withContext(Dispatchers.Default) {
-        val native = native ?: return@withContext null
-        if (!assets.isReady()) return@withContext null
-        if (!initialized) {
-            initialized = native.init(assets)
+        synchronized(nativeLock) {
+            val native = native ?: return@synchronized null
+            if (!assets.isReady()) return@synchronized null
             if (!initialized) {
-                Log.w(TAG, "Paddle OCR failed to initialize")
-                return@withContext null
+                initialized = native.init(assets)
+                if (!initialized) {
+                    Log.w(TAG, "Paddle OCR failed to initialize")
+                    return@synchronized null
+                }
             }
+            native.recognize(bitmap)
         }
-        native.recognize(bitmap)
     }
 
     fun close() {
-        native?.release()
-        initialized = false
+        synchronized(nativeLock) {
+            native?.release()
+            initialized = false
+        }
     }
 }
