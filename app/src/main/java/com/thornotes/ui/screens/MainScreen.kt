@@ -236,7 +236,10 @@ fun MainScreen(
         scope.launch {
             try {
                 val bitmap = captureManager.captureScreen()
-                if (bitmap != null) onCropClick(bitmap)
+                if (bitmap != null) {
+                    onCropClick(bitmap)
+                } else {
+                }
             } finally {
                 finishCaptureRequest()
             }
@@ -273,10 +276,16 @@ fun MainScreen(
     }
 
     fun requestCapture(action: PendingCapture) {
-        if (isProcessing) return
+        if (isProcessing) {
+            return
+        }
         val now = SystemClock.elapsedRealtime()
-        if (now - lastCaptureRequestAt < CaptureButtonCooldownMillis) return
-        if (!captureRequestInFlight.compareAndSet(false, true)) return
+        if (now - lastCaptureRequestAt < CaptureButtonCooldownMillis) {
+            return
+        }
+        if (!captureRequestInFlight.compareAndSet(false, true)) {
+            return
+        }
         lastCaptureRequestAt = now
         pendingCapture = action
         if (captureManager.isReady) {

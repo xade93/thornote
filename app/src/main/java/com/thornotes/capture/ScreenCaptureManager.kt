@@ -33,6 +33,10 @@ class ScreenCaptureManager(private val context: Context) {
     private var mediaProjection: MediaProjection? = null
     private var virtualDisplay: VirtualDisplay? = null
     private var imageReader: ImageReader? = null
+    private var captureWidth = 0
+    private var captureHeight = 0
+    private var captureDensity = 0
+    private var pendingCapture: kotlinx.coroutines.CancellableContinuation<Bitmap?>? = null
     private val captureThread = HandlerThread("ThorNotesScreenCapture").apply { start() }
     private val handler = Handler(captureThread.looper)
     private val captureMutex = Mutex()
@@ -91,7 +95,7 @@ class ScreenCaptureManager(private val context: Context) {
             } ?: run {
                 Log.e(TAG, "Timed out waiting for screen capture")
                 handler.post {
-                    cleanupFrameCaptureOnHandler()
+                    clearPendingCaptureOnHandler()
                 }
                 null
             }
@@ -106,17 +110,41 @@ class ScreenCaptureManager(private val context: Context) {
         }
         continuation.invokeOnCancellation {
             handler.post {
-                cleanupFrameCaptureOnHandler()
+                if (pendingCapture === continuation) {
+                    clearPendingCaptureOnHandler()
+                }
             }
         }
     }
 
     private fun captureSingleFrameOnHandler(continuation: kotlinx.coroutines.CancellableContinuation<Bitmap?>) {
+        if (pendingCapture != null) {
+            if (continuation.isActive) continuation.resume(null)
+            return
+        }
+
+        if (!ensureCaptureSessionOnHandler()) {
+            if (continuation.isActive) continuation.resume(null)
+            return
+        }
+
+        val reader = imageReader
+        if (reader != null) {
+            val immediateBitmap = acquireBitmapFromReaderOnHandler(reader)
+            if (immediateBitmap != null) {
+                if (continuation.isActive) continuation.resume(immediateBitmap)
+                return
+            }
+        }
+
+        pendingCapture = continuation
+    }
+
+    private fun ensureCaptureSessionOnHandler(): Boolean {
         val projection = mediaProjection
         if (projection == null) {
             Log.e(TAG, "captureScreen called but mediaProjection is null")
-            if (continuation.isActive) continuation.resume(null)
-            return
+            return false
         }
 
         val metrics = getScreenMetrics()
@@ -124,60 +152,31 @@ class ScreenCaptureManager(private val context: Context) {
         val height = metrics.heightPixels
         val density = metrics.densityDpi
 
-        Log.d(TAG, "Capturing screen: ${width}x${height} @ ${density}dpi")
+        if (
+            virtualDisplay != null &&
+            imageReader != null &&
+            captureWidth == width &&
+            captureHeight == height &&
+            captureDensity == density
+        ) {
+            return true
+        }
 
         cleanupFrameCaptureOnHandler()
+        Log.d(TAG, "Creating capture session: ${width}x${height} @ ${density}dpi")
 
         val reader = try {
-            ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 1)
+            ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 3)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to create ImageReader", e)
-            if (continuation.isActive) continuation.resume(null)
-            return
+            return false
         }
         imageReader = reader
 
-        var captured = false
-        var completed = false
-
-        fun complete(bitmap: Bitmap?) {
-            if (completed) return
-            completed = true
-            cleanupFrameCaptureOnHandler()
-            if (continuation.isActive) continuation.resume(bitmap)
-        }
-
         reader.setOnImageAvailableListener({ imgReader ->
-            if (!captured) {
-                captured = true
-                val image = imgReader.acquireLatestImage()
-                if (image != null) {
-                    Log.d(TAG, "Image acquired: ${image.width}x${image.height}")
-                    var imageClosed = false
-                    fun closeImage() {
-                        if (!imageClosed) {
-                            runCatching { image.close() }
-                                .onFailure { Log.w(TAG, "Failed to close captured image", it) }
-                            imageClosed = true
-                        }
-                    }
-                    try {
-                        val bitmap = imageToBitmap(image, width, height)
-                        closeImage()
-                        complete(bitmap)
-                    } catch (e: Throwable) {
-                        Log.e(TAG, "Failed to convert screen capture", e)
-                        closeImage()
-                        complete(null)
-                    }
-                } else {
-                    Log.e(TAG, "acquireLatestImage returned null")
-                    complete(null)
-                }
-            }
+            handleImageAvailableOnHandler(imgReader)
         }, handler)
 
-        // Create VirtualDisplay AFTER setting the listener
         try {
             val display = projection.createVirtualDisplay(
                 "ThorNotesCapture",
@@ -187,11 +186,74 @@ class ScreenCaptureManager(private val context: Context) {
                 null, null
             )
             virtualDisplay = display
+            captureWidth = width
+            captureHeight = height
+            captureDensity = density
             Log.d(TAG, "VirtualDisplay created")
+            return true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to create VirtualDisplay", e)
-            complete(null)
+            cleanupFrameCaptureOnHandler()
+            return false
         }
+    }
+
+    private fun handleImageAvailableOnHandler(reader: ImageReader) {
+        val continuation = pendingCapture
+        if (continuation == null) {
+            return
+        }
+
+        val bitmap = acquireBitmapFromReaderOnHandler(reader)
+        if (bitmap == null) {
+            completePendingCaptureOnHandler(null)
+        } else {
+            completePendingCaptureOnHandler(bitmap)
+        }
+    }
+
+    private fun acquireBitmapFromReaderOnHandler(reader: ImageReader): Bitmap? {
+        val image = try {
+            reader.acquireLatestImage()
+        } catch (e: IllegalStateException) {
+            return null
+        }
+        if (image == null) {
+            Log.e(TAG, "acquireLatestImage returned null")
+            return null
+        }
+
+        Log.d(TAG, "Image acquired: ${image.width}x${image.height}")
+        var imageClosed = false
+        fun closeImage() {
+            if (!imageClosed) {
+                runCatching { image.close() }
+                    .onFailure { Log.w(TAG, "Failed to close captured image", it) }
+                imageClosed = true
+            }
+        }
+
+        try {
+            val bitmap = imageToBitmap(image, captureWidth, captureHeight)
+            closeImage()
+            return bitmap
+        } catch (e: Throwable) {
+            Log.e(TAG, "Failed to convert screen capture", e)
+            closeImage()
+            return null
+        }
+    }
+
+    private fun completePendingCaptureOnHandler(bitmap: Bitmap?) {
+        val continuation = pendingCapture ?: return
+        pendingCapture = null
+        if (continuation.isActive) continuation.resume(bitmap)
+    }
+
+    private fun clearPendingCaptureOnHandler() {
+        if (pendingCapture != null) {
+        }
+        pendingCapture = null
     }
 
     fun release() {
@@ -205,11 +267,17 @@ class ScreenCaptureManager(private val context: Context) {
     }
 
     private fun cleanupFrameCaptureOnHandler() {
+        clearPendingCaptureOnHandler()
+        if (virtualDisplay != null || imageReader != null) {
+        }
         virtualDisplay?.release()
         imageReader?.setOnImageAvailableListener(null, null)
         imageReader?.close()
         virtualDisplay = null
         imageReader = null
+        captureWidth = 0
+        captureHeight = 0
+        captureDensity = 0
     }
 
     private fun imageToBitmap(image: android.media.Image, width: Int, height: Int): Bitmap {

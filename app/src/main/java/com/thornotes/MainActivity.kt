@@ -222,7 +222,8 @@ class MainActivity : ComponentActivity() {
             val process = ProcessBuilder(command)
                 .redirectErrorStream(true)
                 .start()
-            process.waitFor() == 0
+            val success = process.waitFor() == 0
+            success
         } catch (e: Exception) {
             Log.w(TAG, "Input command failed: ${command.joinToString(" ")}", e)
             false
