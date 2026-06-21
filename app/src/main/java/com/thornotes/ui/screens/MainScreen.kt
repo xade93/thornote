@@ -21,20 +21,24 @@ import android.widget.EditText
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -47,6 +51,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -931,12 +936,13 @@ private fun NotebookPageSelector(
 ) {
     var pageMenuExpanded by remember { mutableStateOf(false) }
     var creatingPage by remember { mutableStateOf(false) }
-    var renamingPage by remember { mutableStateOf(false) }
+    var pagePendingActions by remember { mutableStateOf<NotebookPageInfo?>(null) }
+    var pagePendingRename by remember { mutableStateOf<NotebookPageInfo?>(null) }
     var pagePendingDelete by remember { mutableStateOf<NotebookPageInfo?>(null) }
     var newPageName by remember { mutableStateOf("") }
-    var renamedPageName by remember(currentPage?.id) { mutableStateOf(currentPage?.name.orEmpty()) }
+    var renamedPageName by remember { mutableStateOf("") }
     val pageName = currentPage?.name ?: "No Page"
-    val pageStats = currentPage?.let { "${it.entryCount} entries - ${formatBytes(it.sizeBytes)}" } ?: ""
+    val pageStats = currentPage?.let { "${formatEntryCount(it.entryCount)} - ${formatBytes(it.sizeBytes)}" } ?: ""
 
     Box(modifier = modifier) {
         Row(
@@ -969,51 +975,58 @@ private fun NotebookPageSelector(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+            Text(
+                text = "▾",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.78f),
+            )
         }
         DropdownMenu(
             expanded = pageMenuExpanded,
             onDismissRequest = { pageMenuExpanded = false },
+            modifier = Modifier
+                .widthIn(min = 248.dp, max = 320.dp)
+                .background(MaterialTheme.colorScheme.surface)
+                .border(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+                    shape = RoundedCornerShape(8.dp),
+                )
+                .padding(vertical = 4.dp),
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(8.dp),
+            tonalElevation = 2.dp,
         ) {
             pages.forEach { page ->
-                DropdownMenuItem(
-                    text = { Text("${page.name} (${formatBytes(page.sizeBytes)})") },
+                NotebookPageMenuItem(
+                    page = page,
+                    selected = page.id == currentPage?.id,
                     onClick = {
                         onPageSelected(page.id)
                         pageMenuExpanded = false
                     },
+                    onLongClick = {
+                        pageMenuExpanded = false
+                        pagePendingActions = page
+                    },
                 )
             }
-            DropdownMenuItem(
-                text = { Text("New page") },
+            NotebookMenuDivider()
+            NotebookMenuActionItem(
+                label = "New page",
                 onClick = {
                     pageMenuExpanded = false
                     creatingPage = true
                 },
             )
-            DropdownMenuItem(
-                text = { Text("Settings") },
+            NotebookMenuActionItem(
+                label = "Settings",
                 onClick = {
                     pageMenuExpanded = false
                     onSettingsClick()
                 },
             )
-            if (currentPage != null) {
-                DropdownMenuItem(
-                    text = { Text("Rename current page") },
-                    onClick = {
-                        renamedPageName = currentPage.name
-                        pageMenuExpanded = false
-                        renamingPage = true
-                    },
-                )
-                DropdownMenuItem(
-                    text = { Text("Delete current page") },
-                    onClick = {
-                        pageMenuExpanded = false
-                        pagePendingDelete = currentPage
-                    },
-                )
-            }
         }
     }
 
@@ -1054,9 +1067,48 @@ private fun NotebookPageSelector(
         )
     }
 
-    if (renamingPage && currentPage != null) {
+    pagePendingActions?.let { page ->
         AlertDialog(
-            onDismissRequest = { renamingPage = false },
+            onDismissRequest = { pagePendingActions = null },
+            title = {
+                Text(
+                    text = page.name,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    NotebookPageActionMetadata(page = page)
+                    NotebookMenuDivider()
+                    NotebookDialogAction(
+                        label = "Rename page",
+                        onClick = {
+                            renamedPageName = page.name
+                            pagePendingRename = page
+                            pagePendingActions = null
+                        },
+                    )
+                    NotebookDialogAction(
+                        label = "Delete page",
+                        onClick = {
+                            pagePendingDelete = page
+                            pagePendingActions = null
+                        },
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { pagePendingActions = null }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    pagePendingRename?.let { page ->
+        AlertDialog(
+            onDismissRequest = { pagePendingRename = null },
             title = { Text("Rename page") },
             text = {
                 OutlinedTextField(
@@ -1075,15 +1127,15 @@ private fun NotebookPageSelector(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        onRenamePage(currentPage.id, renamedPageName)
-                        renamingPage = false
+                        onRenamePage(page.id, renamedPageName)
+                        pagePendingRename = null
                     },
                 ) {
                     Text("Rename")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { renamingPage = false }) {
+                TextButton(onClick = { pagePendingRename = null }) {
                     Text("Cancel")
                 }
             },
@@ -1114,6 +1166,172 @@ private fun NotebookPageSelector(
             },
         )
     }
+}
+
+@Composable
+private fun NotebookPageActionMetadata(page: NotebookPageInfo) {
+    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        NotebookMetadataRow(label = "Entries", value = formatEntryCount(page.entryCount))
+        NotebookMetadataRow(label = "Size", value = formatBytes(page.sizeBytes))
+        NotebookMetadataRow(label = "Modified", value = formatPageTimestamp(page.updatedAt))
+        NotebookMetadataRow(label = "Created", value = formatPageTimestamp(page.createdAt))
+    }
+}
+
+@Composable
+private fun NotebookMetadataRow(
+    label: String,
+    value: String,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(0.42f),
+        )
+        Text(
+            text = value,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.End,
+            modifier = Modifier.weight(0.58f),
+        )
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun NotebookPageMenuItem(
+    page: NotebookPageInfo,
+    selected: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+) {
+    val primaryColor = if (selected) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
+    val secondaryColor = if (selected) {
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.72f)
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick,
+            )
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .width(3.dp)
+                .height(28.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(
+                    if (selected) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        Color.Transparent
+                    },
+                ),
+        )
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = page.name,
+                fontSize = 14.sp,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
+                color = primaryColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = "${formatEntryCount(page.entryCount)} - ${formatBytes(page.sizeBytes)}",
+                fontSize = 11.sp,
+                color = secondaryColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+private fun NotebookDialogAction(
+    label: String,
+    onClick: () -> Unit,
+) {
+    TextButton(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+    ) {
+        Text(
+            text = label,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+@Composable
+private fun NotebookMenuActionItem(
+    label: String,
+    onClick: () -> Unit,
+) {
+    DropdownMenuItem(
+        text = {
+            Text(
+                text = label,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
+        onClick = onClick,
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 2.dp),
+    )
+}
+
+@Composable
+private fun NotebookMenuDivider() {
+    HorizontalDivider(
+        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f),
+    )
+}
+
+private fun formatEntryCount(count: Int): String {
+    return if (count == 1) "1 entry" else "$count entries"
+}
+
+private fun formatPageTimestamp(timestamp: Long): String {
+    return DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(timestamp))
 }
 
 @Composable
