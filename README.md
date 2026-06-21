@@ -21,9 +21,9 @@ It is still rough, but it is already useful for visual novels, detective games, 
 - Browse saved screenshots with thumbnails for quick jumping.
 - Pin/star important screenshots so they stay easy to find.
 - Double-tap the time to turn the bottom screen black for OLED blackout mode, then double-tap again to restore.
-- Use an optional floating overlay button to hide or restore ThorNotes while playing.
-- Keep notebook data as JSON metadata plus plain image files, so it can be migrated or backed up if needed.
-- Use the offline English dictionary page for quick lookup.
+- Use optional floating overlay button to hide or restore ThorNotes while playing, to use other second screen app. Coexist well with other floating apps e.g. DS Overlay.
+- Backup and restore notebook from Settings.
+- *TBD* Use the offline English dictionary page for quick lookup.
 
 ## How It Works
 
@@ -57,19 +57,9 @@ Shared preferences mainly store UI/settings state, such as text size, OCR crop r
 
 Uninstalling the app deletes its internal data. Android may include it in system app backup because `allowBackup=true`, but that depends on device/account behavior and should not be treated as the main backup path.
 
-For debug builds, `adb run-as` can read the app-private directory:
+Use Settings -> Notebook Backup to export or import a ThorNotes ZIP backup. Export writes the notebook folder and relevant shared preferences into a ZIP file. Import merges pages from the selected backup into the current notebook instead of replacing existing pages.
 
-```bash
-adb exec-out run-as com.thornotes tar -C /data/user/0/com.thornotes -cf - files/notebook shared_prefs/thornotes_prefs.xml shared_prefs/notebook.xml > thornotes-backup.tar
-```
-
-Restore into an installed debug build:
-
-```bash
-adb shell run-as com.thornotes sh -c 'cd /data/user/0/com.thornotes && tar -xf -' < thornotes-backup.tar
-```
-
-If `run-as` says the package is not debuggable, Android is blocking shell access to private app data. At that point the practical options are root access, Android's own backup/restore, or adding an in-app export/import flow.
+Import is designed to keep existing notebook data intact if a restore fails partway through. ThorNotes copies imported pages first, normalizes older backup entries into the current storage format where possible, and only then updates the live page list. Still, do not close ThorNotes while import or export is running.
 
 ## Build
 

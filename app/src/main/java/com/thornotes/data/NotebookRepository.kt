@@ -9,8 +9,15 @@ import com.thornotes.data.models.NotebookEntryType
 import com.thornotes.data.models.NotebookPageInfo
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import java.io.BufferedOutputStream
 import java.io.File
+import java.io.FileOutputStream
+import java.io.InputStream
+import java.io.OutputStream
 import java.util.UUID
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 
 class NotebookRepository(private val context: Context) {
 
@@ -21,6 +28,24 @@ class NotebookRepository(private val context: Context) {
         val updatedAt: Long,
     )
 
+    private data class ImportedStoredPage(
+        val id: String?,
+        val name: String?,
+        val createdAt: Long?,
+        val updatedAt: Long?,
+    )
+
+    private data class ImportedNotebookEntry(
+        val id: String?,
+        val pageId: String?,
+        val type: String?,
+        val createdAt: Long?,
+        val text: String?,
+        val imagePath: String?,
+        val isStarred: Boolean?,
+        val isPinned: Boolean?,
+    )
+
     private val gson = Gson()
     private val notebookDir = File(context.filesDir, "notebook")
     private val metadataFile = File(notebookDir, "pages.json")
@@ -29,6 +54,11 @@ class NotebookRepository(private val context: Context) {
 
     private var storedPages: List<StoredPage> = emptyList()
     private var allEntries: List<NotebookEntry> = emptyList()
+
+    data class BackupImportResult(
+        val pagesImported: Int,
+        val pagesSkipped: Int,
+    )
 
     private val _pages = MutableStateFlow<List<NotebookPageInfo>>(emptyList())
     val pages: StateFlow<List<NotebookPageInfo>> = _pages
@@ -129,6 +159,98 @@ class NotebookRepository(private val context: Context) {
 
     fun resolveImagePath(imagePath: String?): String? {
         return imagePath?.let { imageFile(it).absolutePath }
+    }
+
+    @Synchronized
+    fun exportBackup(output: OutputStream) {
+        ZipOutputStream(BufferedOutputStream(output)).use { zip ->
+            zip.addDirectory("files/")
+            zip.addFileTree(notebookDir, "files/notebook")
+
+            val sharedPrefsDir = File(context.applicationInfo.dataDir, "shared_prefs")
+            if (sharedPrefsDir.exists()) {
+                zip.addFileTree(sharedPrefsDir, "shared_prefs")
+            }
+        }
+    }
+
+    @Synchronized
+    fun importBackup(input: InputStream): BackupImportResult {
+        val tempDir = File(context.cacheDir, "notebook-import-${UUID.randomUUID()}")
+        val importedPageIds = mutableListOf<String>()
+        return try {
+            tempDir.mkdirs()
+            extractZip(input, tempDir)
+
+            val backupNotebookDir = listOf(
+                File(tempDir, "files/notebook"),
+                File(tempDir, "notebook"),
+            ).firstOrNull { File(it, "pages.json").exists() }
+                ?: throw IllegalArgumentException("No files/notebook/pages.json found in backup.")
+
+            val type = object : TypeToken<List<ImportedStoredPage>>() {}.type
+            val importedPages: List<ImportedStoredPage> =
+                gson.fromJson(File(backupNotebookDir, "pages.json").readText(), type) ?: emptyList()
+            val backupPages = importedPages.mapNotNull { page ->
+                val id = page.id?.takeIf { it.isNotBlank() }
+                val name = page.name?.takeIf { it.isNotBlank() }
+                if (id == null || name == null) {
+                    null
+                } else {
+                    StoredPage(
+                        id = id,
+                        name = name,
+                        createdAt = page.createdAt ?: 0L,
+                        updatedAt = page.updatedAt ?: page.createdAt ?: 0L,
+                    )
+                }
+            }
+
+            var imported = 0
+            var skipped = 0
+            val usedIds = storedPages.map { it.id }.toMutableSet()
+            val mergedPages = storedPages.toMutableList()
+
+            for (page in backupPages) {
+                val sourcePageDir = File(backupNotebookDir, "pages/${page.id}")
+                if (!sourcePageDir.exists()) {
+                    skipped += 1
+                    continue
+                }
+
+                val targetPageId = if (usedIds.contains(page.id) || pageDir(page.id).exists()) {
+                    UUID.randomUUID().toString()
+                } else {
+                    page.id
+                }
+                val targetPageDir = pageDir(targetPageId)
+                if (targetPageDir.exists()) {
+                    skipped += 1
+                    continue
+                }
+
+                copyDirectory(sourcePageDir, targetPageDir)
+                importedPageIds += targetPageId
+                normalizeImportedEntries(targetPageDir, page.id, targetPageId)
+
+                mergedPages += page.copy(
+                    id = targetPageId,
+                    name = if (targetPageId == page.id) page.name else "${page.name} (restored)",
+                )
+                usedIds += targetPageId
+                imported += 1
+            }
+
+            storedPages = mergedPages
+            savePages()
+            refresh()
+            BackupImportResult(pagesImported = imported, pagesSkipped = skipped)
+        } catch (exception: Exception) {
+            importedPageIds.forEach { pageDir(it).deleteRecursively() }
+            throw exception
+        } finally {
+            tempDir.deleteRecursively()
+        }
     }
 
     @Synchronized
@@ -273,7 +395,7 @@ class NotebookRepository(private val context: Context) {
     }
 
     private fun savePages() {
-        metadataFile.writeText(gson.toJson(storedPages))
+        atomicWriteText(metadataFile, gson.toJson(storedPages))
     }
 
     private fun loadEntries(pageId: String): List<NotebookEntry> {
@@ -341,10 +463,131 @@ class NotebookRepository(private val context: Context) {
         return File(dir, "entries.json")
     }
 
+    private fun copyDirectory(source: File, target: File) {
+        if (source.isDirectory) {
+            target.mkdirs()
+            source.listFiles()?.forEach { child ->
+                copyDirectory(child, File(target, child.name))
+            }
+        } else {
+            target.parentFile?.mkdirs()
+            source.copyTo(target, overwrite = false)
+        }
+    }
+
+    private fun normalizeImportedEntries(pageDir: File, oldPageId: String, newPageId: String) {
+        val file = File(pageDir, "entries.json")
+        if (!file.exists()) return
+        val type = object : TypeToken<List<ImportedNotebookEntry>>() {}.type
+        val entries: List<ImportedNotebookEntry> = gson.fromJson(file.readText(), type) ?: emptyList()
+        val updated = entries.mapNotNull { entry ->
+            val id = entry.id?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val imagePath = if (oldPageId == newPageId) {
+                entry.imagePath
+            } else {
+                entry.imagePath?.replace(
+                    oldValue = "pages/$oldPageId/",
+                    newValue = "pages/$newPageId/",
+                    ignoreCase = false,
+                )
+            }
+            val entryType = when (entry.type) {
+                NotebookEntryType.SCREENSHOT.name -> NotebookEntryType.SCREENSHOT
+                NotebookEntryType.TEXT_CHUNK.name, "OCR_TEXT" -> NotebookEntryType.TEXT_CHUNK
+                else -> if (imagePath.isNullOrBlank()) {
+                    NotebookEntryType.TEXT_CHUNK
+                } else {
+                    NotebookEntryType.SCREENSHOT
+                }
+            }
+
+            NotebookEntry(
+                id = id,
+                pageId = newPageId,
+                type = entryType,
+                createdAt = entry.createdAt ?: 0L,
+                text = entry.text.orEmpty(),
+                imagePath = imagePath,
+                isStarred = entry.isStarred ?: false,
+                isPinned = entry.isPinned ?: false,
+            )
+        }
+        atomicWriteText(file, gson.toJson(updated))
+    }
+
+    private fun atomicWriteText(file: File, text: String) {
+        file.parentFile?.mkdirs()
+        val tempFile = File(file.parentFile, "${file.name}.tmp-${UUID.randomUUID()}")
+        FileOutputStream(tempFile).use { output ->
+            output.write(text.encodeToByteArray())
+            output.fd.sync()
+        }
+        if (!tempFile.renameTo(file)) {
+            tempFile.copyTo(file, overwrite = true)
+            tempFile.delete()
+        }
+    }
+
     private fun directorySize(file: File): Long {
         if (!file.exists()) return 0L
         if (file.isFile) return file.length()
         return file.listFiles()?.sumOf { directorySize(it) } ?: 0L
+    }
+
+    private fun ZipOutputStream.addFileTree(file: File, zipPath: String) {
+        val cleanPath = zipPath.trim('/')
+        if (file.isDirectory) {
+            addDirectory("$cleanPath/")
+            file.listFiles()
+                ?.sortedWith(compareBy<File> { !it.isDirectory }.thenBy { it.name })
+                ?.forEach { child ->
+                    addFileTree(child, "$cleanPath/${child.name}")
+                }
+        } else if (file.isFile) {
+            putNextEntry(ZipEntry(cleanPath))
+            file.inputStream().use { input ->
+                input.copyTo(this)
+            }
+            closeEntry()
+        }
+    }
+
+    private fun ZipOutputStream.addDirectory(zipPath: String) {
+        val cleanPath = zipPath.trim('/').let { "$it/" }
+        putNextEntry(ZipEntry(cleanPath))
+        closeEntry()
+    }
+
+    private fun extractZip(input: InputStream, destination: File) {
+        ZipInputStream(input).use { zip ->
+            while (true) {
+                val entry = zip.nextEntry ?: break
+                val entryName = entry.name
+                    ?: throw IllegalArgumentException("Zip entry has no path.")
+                val target = safeZipTarget(destination, entryName)
+                if (entry.isDirectory) {
+                    target.mkdirs()
+                } else {
+                    target.parentFile?.mkdirs()
+                    target.outputStream().use { output ->
+                        zip.copyTo(output)
+                    }
+                }
+                zip.closeEntry()
+            }
+        }
+    }
+
+    private fun safeZipTarget(destination: File, path: String): File {
+        require(path.isNotBlank() && !path.startsWith("/") && !path.contains("..")) {
+            "Unsafe zip path: $path"
+        }
+        val target = File(destination, path).canonicalFile
+        val base = destination.canonicalFile
+        require(target.path == base.path || target.path.startsWith(base.path + File.separator)) {
+            "Zip path escapes destination: $path"
+        }
+        return target
     }
 
     private companion object {

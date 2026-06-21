@@ -64,9 +64,17 @@ fun WelcomeScreen(
                 "📓 Top bar",
                 welcomeText(
                     bold("Tap the notebook name"),
-                    plain(" to switch pages, create a page, rename, delete, or open "),
+                    plain(" to switch pages, create a page, or open "),
                     italic("settings"),
-                    plain("."),
+                    plain(". Long-press a page in the menu for page details, rename, and delete."),
+                ),
+            )
+            WelcomeItem(
+                "💾 Backup",
+                welcomeText(
+                    plain("Use "),
+                    bold("Settings"),
+                    plain(" to export or import a ZIP backup. Import merges pages, keeps existing notes, and normalizes older backup entries where possible. Do not close ThorNotes while import or export is running."),
                 ),
             )
             WelcomeItem(

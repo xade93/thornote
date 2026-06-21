@@ -113,6 +113,7 @@ class MainActivity : ComponentActivity() {
                     "settings" -> SettingsScreen(
                         settings = settings,
                         textRecognizer = textRecognizer,
+                        notebook = notebook,
                         onBack = { currentScreen = "main" },
                         onShowWelcome = {
                             settings.resetWelcomeSeen()

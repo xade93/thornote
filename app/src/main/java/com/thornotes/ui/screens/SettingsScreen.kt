@@ -3,6 +3,9 @@ package com.thornotes.ui.screens
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -11,23 +14,29 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -35,15 +44,22 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.thornotes.data.NotebookRepository
 import com.thornotes.data.models.AppSettings
 import com.thornotes.ocr.TextRecognizer
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     settings: AppSettings,
     textRecognizer: TextRecognizer,
+    notebook: NotebookRepository,
     onBack: () -> Unit,
     onShowWelcome: () -> Unit,
 ) {
@@ -54,6 +70,67 @@ fun SettingsScreen(
     val paddleStatus by textRecognizer.paddleOcr.assets.status.collectAsState()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    var backupBusy by rememberSaveable { mutableStateOf(false) }
+    var backupErrorTitle by rememberSaveable { mutableStateOf("") }
+    var backupErrorDetails by rememberSaveable { mutableStateOf("") }
+    val backupFileName = rememberSaveable {
+        val stamp = SimpleDateFormat("yyyy-MM-dd-HHmm", Locale.US).format(Date())
+        "thornotes-backup-$stamp.zip"
+    }
+    val exportBackupLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/zip"),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            backupBusy = true
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openOutputStream(uri)?.use { output ->
+                        notebook.exportBackup(output)
+                    } ?: error("Could not open selected file.")
+                }
+            }
+            backupBusy = false
+            result.fold(
+                onSuccess = {
+                    Toast.makeText(context, "Notebook backup exported.", Toast.LENGTH_LONG).show()
+                },
+                onFailure = {
+                    backupErrorTitle = "Export failed"
+                    backupErrorDetails = it.stackTraceToString()
+                },
+            )
+        }
+    }
+    val importBackupLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            backupBusy = true
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openInputStream(uri)?.use { input ->
+                        notebook.importBackup(input)
+                    } ?: error("Could not open selected file.")
+                }
+            }
+            backupBusy = false
+            result.fold(
+                onSuccess = {
+                    Toast.makeText(
+                        context,
+                        "Imported ${it.pagesImported} pages. Skipped ${it.pagesSkipped}.",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                },
+                onFailure = {
+                    backupErrorTitle = "Import failed"
+                    backupErrorDetails = it.stackTraceToString()
+                },
+            )
+        }
+    }
 
     LaunchedEffect(Unit) {
         textRecognizer.paddleOcr.assets.refresh()
@@ -141,6 +218,36 @@ fun SettingsScreen(
                         selected = false,
                         onClick = onShowWelcome,
                         modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+
+            SettingsSection(title = "Notebook Backup") {
+                Text(
+                    text = "Export creates a zip backup. Import merges pages from a ThorNotes zip backup and keeps existing pages.",
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 20.sp,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    SettingsOption(
+                        label = if (backupBusy) "Working" else "Export",
+                        selected = false,
+                        enabled = !backupBusy,
+                        onClick = { exportBackupLauncher.launch(backupFileName) },
+                        modifier = Modifier.weight(1f),
+                    )
+                    SettingsOption(
+                        label = if (backupBusy) "Working" else "Import",
+                        selected = false,
+                        enabled = !backupBusy,
+                        onClick = { importBackupLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) },
+                        modifier = Modifier.weight(1f),
                     )
                 }
             }
@@ -265,6 +372,37 @@ fun SettingsScreen(
                 }
             }
         }
+    }
+
+    if (backupErrorDetails.isNotBlank()) {
+        AlertDialog(
+            onDismissRequest = {
+                backupErrorTitle = ""
+                backupErrorDetails = ""
+            },
+            title = { Text(backupErrorTitle.ifBlank { "Backup failed" }) },
+            text = {
+                Text(
+                    text = backupErrorDetails,
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 16.sp,
+                    modifier = Modifier
+                        .heightIn(max = 260.dp)
+                        .verticalScroll(rememberScrollState()),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        backupErrorTitle = ""
+                        backupErrorDetails = ""
+                    },
+                ) {
+                    Text("Close")
+                }
+            },
+        )
     }
 }
 
