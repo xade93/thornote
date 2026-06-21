@@ -23,15 +23,7 @@ Screenshots:
 - **Backup and restore** notebook from Settings.
 - *TBD* Use the offline English dictionary page for quick lookup.
 
-## How It Works
-
-ThorNotes uses Android screen capture permission for still screenshots and OCR. Android describes this as "start recording or casting" because MediaProjection uses one generic permission prompt, but ThorNotes only grabs frames when you press Shot or OCR.
-
-For OCR, ThorNotes can use local PP-OCRv5 assets when available and falls back to ML Kit text recognition. Captured text is saved into the active notebook page, alongside screenshots.
-
-The floating overlay button requires Android's "display over other apps" permission. It hides ThorNotes to the background and brings it back without closing the current notebook.
-
-## Data And Backup
+## Data and Backup
 
 Notebook data is stored in app-private internal storage:
 
@@ -49,15 +41,10 @@ Notebook data is stored in app-private internal storage:
     └── notebook.xml
 ```
 
-The important backup target is `files/notebook`. It contains page metadata, entry order, OCR text, and screenshot files. Screenshot paths are relative to the notebook folder, so the notebook directory is intended to be self-contained.
-
-Shared preferences mainly store UI/settings state, such as text size, OCR crop region, and the last opened notebook page. The dictionary database is copied from the APK and does not need to be backed up.
-
-Uninstalling the app deletes its internal data. Android may include it in system app backup because `allowBackup=true`, but that depends on device/account behavior and should not be treated as the main backup path.
-
-Use `Settings -> Notebook Backup` to export or import a ThorNotes ZIP backup. Export writes the notebook folder and relevant shared preferences into a ZIP file. Import adds pages from the selected backup into the current notebook without replacing existing pages. Pages that already exist are skipped.
-
-Import is designed to keep existing notebook data intact if a restore fails partway through. ThorNotes copies imported pages first, normalizes older backup entries into the current storage format where possible, and only then updates the live page list. Still, do not close ThorNotes while import or export is running.
+- Uninstalling the app deletes its internal data. Android may include it in system app backup because `allowBackup=true`, but that depends on device/account behavior and should not be treated as the main backup path.
+- Use `Settings -> Notebook Backup` to backup or restore a ThorNotes ZIP backup. Export writes the notebook folder and relevant shared preferences into a ZIP file. Import adds pages from the selected backup into the current notebook without replacing existing pages. Pages that already exist are skipped.
+- Import is designed to keep existing notebook data intact if a restore fails partway through. ThorNotes copies imported pages first, normalizes older backup entries into the current storage format where possible, and only then updates the live page list.
+- Still, please do not close ThorNotes while backup or restore process is running.
 
 ## Build
 
