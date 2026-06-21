@@ -218,25 +218,18 @@ class NotebookRepository(private val context: Context) {
                     continue
                 }
 
-                val targetPageId = if (usedIds.contains(page.id) || pageDir(page.id).exists()) {
-                    UUID.randomUUID().toString()
-                } else {
-                    page.id
-                }
-                val targetPageDir = pageDir(targetPageId)
-                if (targetPageDir.exists()) {
+                if (usedIds.contains(page.id) || pageDir(page.id).exists()) {
                     skipped += 1
                     continue
                 }
 
+                val targetPageId = page.id
+                val targetPageDir = pageDir(targetPageId)
                 copyDirectory(sourcePageDir, targetPageDir)
                 importedPageIds += targetPageId
                 normalizeImportedEntries(targetPageDir, page.id, targetPageId)
 
-                mergedPages += page.copy(
-                    id = targetPageId,
-                    name = if (targetPageId == page.id) page.name else "${page.name} (restored)",
-                )
+                mergedPages += page
                 usedIds += targetPageId
                 imported += 1
             }

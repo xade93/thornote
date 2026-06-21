@@ -74,7 +74,7 @@ fun WelcomeScreen(
                 welcomeText(
                     plain("Use "),
                     bold("Settings"),
-                    plain(" to export or import a ZIP backup. Import merges pages, keeps existing notes, and normalizes older backup entries where possible. Do not close ThorNotes while import or export is running."),
+                    plain(" to export or import a ZIP backup. Import adds missing pages, skips existing pages, and normalizes older backup entries where possible. Do not close ThorNotes while import or export is running."),
                 ),
             )
             WelcomeItem(

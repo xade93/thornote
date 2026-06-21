@@ -226,7 +226,7 @@ fun SettingsScreen(
 
             SettingsSection(title = "Notebook Backup") {
                 Text(
-                    text = "Export creates a zip backup. Import merges pages from a ThorNotes zip backup and keeps existing pages.",
+                    text = "Export creates a zip backup. Import adds missing pages from a ThorNotes zip backup and skips existing pages.",
                     fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     lineHeight = 20.sp,

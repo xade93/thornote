@@ -57,7 +57,7 @@ Shared preferences mainly store UI/settings state, such as text size, OCR crop r
 
 Uninstalling the app deletes its internal data. Android may include it in system app backup because `allowBackup=true`, but that depends on device/account behavior and should not be treated as the main backup path.
 
-Use Settings -> Notebook Backup to export or import a ThorNotes ZIP backup. Export writes the notebook folder and relevant shared preferences into a ZIP file. Import merges pages from the selected backup into the current notebook instead of replacing existing pages.
+Use Settings -> Notebook Backup to export or import a ThorNotes ZIP backup. Export writes the notebook folder and relevant shared preferences into a ZIP file. Import adds pages from the selected backup into the current notebook without replacing existing pages. Pages that already exist are skipped.
 
 Import is designed to keep existing notebook data intact if a restore fails partway through. ThorNotes copies imported pages first, normalizes older backup entries into the current storage format where possible, and only then updates the live page list. Still, do not close ThorNotes while import or export is running.
 
