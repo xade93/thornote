@@ -1,28 +1,23 @@
 # ThorNotes
 
-<img width="1672" height="941" alt="ThorNotes screenshot" src="https://github.com/user-attachments/assets/c203ab70-8c9a-45ad-8067-fdf8fb76f656" />
-
-ThorNotes is a small bottom-screen notebook app made with the Ayn Thor in mind.
+ThorNotes is a small bottom-screen notebook app with dual screen handheld in mind.
 
 When you play lots of games and switch between them, it is easy to forget what was happening in each one. ThorNotes helps by letting you quickly save in-game screenshots or OCR text from a selected screen region, then browse everything later in a clean bottom-screen interface.
 
-It is still rough, but it is already useful for visual novels, detective games, RPGs, and other games where you want to keep track of details, clues, dialogue, names, or memorable moments without leaving the game.
+It is still rough, but I find it already useful for visual novels, detective games, RPGs, and other games where you want to keep track of details, clues, dialogue, names, or memorable moments without leaving the game.
 
-## Download
 
-- GitHub: <https://github.com/xade93/thornote>
-- APK releases: <https://github.com/xade93/thornote/releases/>
+<img width="2454" height="2170" alt="merged-image-2026-06-21T17-10-04" src="https://github.com/user-attachments/assets/477cceb0-cf88-45e8-a554-45ec1711e3ff" />
 
 ## Main Features
 
-- Save screenshots into notebook pages.
-- OCR a selected screen region and save the recognized text.
-- Keep multiple notebook pages, so different games can have separate notes.
-- Browse saved screenshots with thumbnails for quick jumping.
-- Pin/star important screenshots so they stay easy to find.
-- Double-tap the time to turn the bottom screen black for OLED blackout mode, then double-tap again to restore.
-- Use optional floating overlay button to hide or restore ThorNotes while playing, to use other second screen app. Coexist well with other floating apps e.g. DS Overlay.
-- Backup and restore notebook from Settings.
+- **Save screenshots** into notebook pages.
+- **OCR** a selected screen region and save the recognized text. Two methods are provided, both are fully offline. Multilingual support.
+- Keep multiple notebook pages, so different games can have separate notes; Browse saved screenshots with thumbnails for quick jumping.
+- **Pin/star** important screenshots so they stay easy to find.
+- Double-tap the time to turn the bottom screen black for **OLED blackout mode**, then double-tap again to restore.
+- Use optional **floating overlay button** to hide or restore ThorNotes while playing, to use other second screen app. Coexist well with other floating apps e.g. DS Overlay.
+- **Backup and restore** notebook from Settings.
 - *TBD* Use the offline English dictionary page for quick lookup.
 
 ## How It Works
@@ -57,7 +52,7 @@ Shared preferences mainly store UI/settings state, such as text size, OCR crop r
 
 Uninstalling the app deletes its internal data. Android may include it in system app backup because `allowBackup=true`, but that depends on device/account behavior and should not be treated as the main backup path.
 
-Use Settings -> Notebook Backup to export or import a ThorNotes ZIP backup. Export writes the notebook folder and relevant shared preferences into a ZIP file. Import adds pages from the selected backup into the current notebook without replacing existing pages. Pages that already exist are skipped.
+Use `Settings -> Notebook Backup` to export or import a ThorNotes ZIP backup. Export writes the notebook folder and relevant shared preferences into a ZIP file. Import adds pages from the selected backup into the current notebook without replacing existing pages. Pages that already exist are skipped.
 
 Import is designed to keep existing notebook data intact if a restore fails partway through. ThorNotes copies imported pages first, normalizes older backup entries into the current storage format where possible, and only then updates the live page list. Still, do not close ThorNotes while import or export is running.
 
@@ -72,7 +67,7 @@ Requires Android SDK compileSdk 35 and JDK 17.
 
 ## Credits
 
-ThorNotes started from work based on ThorTranslate. Credit to the ThorTranslate author for the initial base.
+ThorNotes started from work based on ThorTranslate. Credit to ThorTranslate (ie ThorLens) author for the initial program.
 
 ## License
 
