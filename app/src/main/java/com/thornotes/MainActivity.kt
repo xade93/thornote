@@ -81,7 +81,8 @@ class MainActivity : ComponentActivity() {
         )
         enableEdgeToEdge()
         setContent {
-            ThorNotesTheme {
+            val themeColor by settings.themeColor.collectAsState()
+            ThorNotesTheme(themeColor = themeColor) {
                 var currentScreen by remember { mutableStateOf("main") }
                 var captureState by remember { mutableStateOf<CaptureState>(CaptureState.Idle) }
                 var cropScreenshot by remember { mutableStateOf<Bitmap?>(null) }

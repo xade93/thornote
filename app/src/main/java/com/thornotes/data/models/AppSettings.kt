@@ -19,6 +19,7 @@ class AppSettings(context: Context) {
         private const val KEY_FLOATING_TOGGLE_ENABLED = "floating_toggle_enabled"
         private const val KEY_WELCOME_SEEN = "welcome_seen"
         private const val KEY_CAPTURE_DEBUG_LOG_ENABLED = "capture_debug_log_enabled"
+        private const val KEY_THEME_COLOR = "theme_color"
 
         const val TEXT_SIZE_SMALL = 0
         const val TEXT_SIZE_MEDIUM = 1
@@ -29,6 +30,12 @@ class AppSettings(context: Context) {
         const val OCR_LANGUAGE_CHINESE = 2
         const val OCR_LANGUAGE_JAPANESE = 3
         const val OCR_LANGUAGE_ALL = 4
+
+        const val THEME_COLOR_PINK = 0
+        const val THEME_COLOR_AMBER = 1
+        const val THEME_COLOR_TEAL = 2
+        const val THEME_COLOR_VIOLET = 3
+        const val THEME_COLOR_RED = 4
     }
 
     private val prefs: SharedPreferences =
@@ -59,6 +66,11 @@ class AppSettings(context: Context) {
         prefs.getBoolean(KEY_CAPTURE_DEBUG_LOG_ENABLED, false)
     )
     val captureDebugLogEnabled: StateFlow<Boolean> = _captureDebugLogEnabled
+
+    private val _themeColor = MutableStateFlow(
+        prefs.getInt(KEY_THEME_COLOR, THEME_COLOR_PINK)
+    )
+    val themeColor: StateFlow<Int> = _themeColor
 
     private val _cropLeft = MutableStateFlow(prefs.getFloat(KEY_CROP_LEFT, 0f))
     private val _cropTop = MutableStateFlow(prefs.getFloat(KEY_CROP_TOP, 0f))
@@ -108,6 +120,11 @@ class AppSettings(context: Context) {
     fun setCaptureDebugLogEnabled(enabled: Boolean) {
         _captureDebugLogEnabled.value = enabled
         prefs.edit().putBoolean(KEY_CAPTURE_DEBUG_LOG_ENABLED, enabled).apply()
+    }
+
+    fun setThemeColor(themeColor: Int) {
+        _themeColor.value = themeColor
+        prefs.edit().putInt(KEY_THEME_COLOR, themeColor).apply()
     }
 
     fun markWelcomeSeen() {

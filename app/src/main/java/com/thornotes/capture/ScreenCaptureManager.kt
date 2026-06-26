@@ -16,6 +16,7 @@ import android.util.DisplayMetrics
 import android.util.Log
 import android.view.WindowManager
 import com.thornotes.data.models.AppSettings
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -31,6 +32,7 @@ class ScreenCaptureManager(
         private const val TAG = "ThorNotes"
         private const val CAPTURE_TIMEOUT_MS = 3_000L
         private const val CAPTURE_COOLDOWN_MS = 1_000L
+        private const val PROJECTION_SETTLE_MS = 1_500L
     }
 
     @Volatile
@@ -46,6 +48,7 @@ class ScreenCaptureManager(
     private val handler = Handler(captureThread.looper)
     private val captureMutex = Mutex()
     private var lastCaptureStartedAt = 0L
+    private var projectionReceivedAt = 0L
 
     // Callback for when projection is ready
     private var onProjectionReady: (() -> Unit)? = null
@@ -69,6 +72,7 @@ class ScreenCaptureManager(
         captureLog("projection_received replacingExisting=${mediaProjection != null}")
         mediaProjection?.unregisterCallback(projectionCallback)
         mediaProjection = projection
+        projectionReceivedAt = SystemClock.elapsedRealtime()
         projection.registerCallback(projectionCallback, handler)
         handler.post {
             cleanupFrameCaptureOnHandler()
@@ -102,6 +106,7 @@ class ScreenCaptureManager(
             }
             lastCaptureStartedAt = now
             captureLog("capture_started")
+            waitForProjectionToSettleIfNeeded()
 
             withTimeoutOrNull(CAPTURE_TIMEOUT_MS) {
                 captureSingleFrame()
@@ -116,6 +121,17 @@ class ScreenCaptureManager(
         } finally {
             captureMutex.unlock()
         }
+    }
+
+    private suspend fun waitForProjectionToSettleIfNeeded() {
+        if (mediaProjection == null || projectionReceivedAt == 0L || virtualDisplay != null) return
+
+        val elapsed = SystemClock.elapsedRealtime() - projectionReceivedAt
+        val remaining = PROJECTION_SETTLE_MS - elapsed
+        if (remaining <= 0L) return
+
+        captureLog("projection_settle_wait millis=$remaining elapsed=$elapsed")
+        delay(remaining)
     }
 
     private suspend fun captureSingleFrame(): Bitmap? = suspendCancellableCoroutine { continuation ->
@@ -185,7 +201,9 @@ class ScreenCaptureManager(
 
         cleanupFrameCaptureOnHandler()
         Log.d(TAG, "Creating capture session: ${width}x${height} @ ${density}dpi")
-        captureLog("capture_session_creating width=$width height=$height density=$density")
+        captureLog(
+            "capture_session_creating width=$width height=$height density=$density projectionAge=${SystemClock.elapsedRealtime() - projectionReceivedAt}"
+        )
 
         val reader = try {
             ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 3)
