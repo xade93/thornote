@@ -25,26 +25,10 @@ Screenshots:
 
 ## Data and Backup
 
-Notebook data is stored in app-private internal storage:
-
-```text
-/data/user/0/com.thornotes/
-├── files/
-│   ├── notebook/
-│   │   ├── pages.json
-│   │   └── pages/<page-id>/
-│   │       ├── entries.json
-│   │       └── images/<entry-id>.jpg
-│   └── english_dictionary.db
-└── shared_prefs/
-    ├── thornotes_prefs.xml
-    └── notebook.xml
-```
-
-- Uninstalling the app deletes its internal data. Android may include it in system app backup because `allowBackup=true`, but that depends on device/account behavior and should not be treated as the main backup path.
-- Use `Settings -> Notebook Backup` to backup or restore a ThorNotes ZIP backup. Export writes the notebook folder and relevant shared preferences into a ZIP file. Import adds pages from the selected backup into the current notebook without replacing existing pages. Pages that already exist are skipped.
-- Import is designed to keep existing notebook data intact if a restore fails partway through. ThorNotes copies imported pages first, normalizes older backup entries into the current storage format where possible, and only then updates the live page list.
-- Still, please do not close ThorNotes while backup or restore process is running.
+- Notebook data is stored in app-private internal storage. Uninstalling the app usually deletes its internal data. Use `Settings -> Notebook Backup` to backup or restore a ThorNotes ZIP backup.
+    - `Export` writes the notebook folder and relevant shared preferences into a zip file.
+    - `Import` adds pages from the selected backup into the current notebook **without replacing existing pages**. Pages that already exist are skipped.
+- Import is designed to keep existing notebook data intact if a restore fails partway through. Its not fully atomic but is usually safe. Still, please try to keep ThorNotes open while backup or restore process is running.
 
 ## Build
 
