@@ -18,6 +18,7 @@ class AppSettings(context: Context) {
         private const val KEY_OCR_LANGUAGE = "ocr_language"
         private const val KEY_FLOATING_TOGGLE_ENABLED = "floating_toggle_enabled"
         private const val KEY_WELCOME_SEEN = "welcome_seen"
+        private const val KEY_CAPTURE_DEBUG_LOG_ENABLED = "capture_debug_log_enabled"
 
         const val TEXT_SIZE_SMALL = 0
         const val TEXT_SIZE_MEDIUM = 1
@@ -53,6 +54,11 @@ class AppSettings(context: Context) {
         prefs.getBoolean(KEY_WELCOME_SEEN, false)
     )
     val welcomeSeen: StateFlow<Boolean> = _welcomeSeen
+
+    private val _captureDebugLogEnabled = MutableStateFlow(
+        prefs.getBoolean(KEY_CAPTURE_DEBUG_LOG_ENABLED, false)
+    )
+    val captureDebugLogEnabled: StateFlow<Boolean> = _captureDebugLogEnabled
 
     private val _cropLeft = MutableStateFlow(prefs.getFloat(KEY_CROP_LEFT, 0f))
     private val _cropTop = MutableStateFlow(prefs.getFloat(KEY_CROP_TOP, 0f))
@@ -97,6 +103,11 @@ class AppSettings(context: Context) {
     fun setFloatingToggleEnabled(enabled: Boolean) {
         _floatingToggleEnabled.value = enabled
         prefs.edit().putBoolean(KEY_FLOATING_TOGGLE_ENABLED, enabled).apply()
+    }
+
+    fun setCaptureDebugLogEnabled(enabled: Boolean) {
+        _captureDebugLogEnabled.value = enabled
+        prefs.edit().putBoolean(KEY_CAPTURE_DEBUG_LOG_ENABLED, enabled).apply()
     }
 
     fun markWelcomeSeen() {

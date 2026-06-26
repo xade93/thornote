@@ -68,10 +68,10 @@ class MainActivity : ComponentActivity() {
                 }
             },
         )
-        captureManager = ScreenCaptureManager(this)
+        settings = AppSettings(this)
+        captureManager = ScreenCaptureManager(this, settings)
         textRecognizer = TextRecognizer(this)
         dictionary = EnglishDictionaryLookup(this)
-        settings = AppSettings(this)
         notebook = NotebookRepository(this)
         ContextCompat.registerReceiver(
             this,

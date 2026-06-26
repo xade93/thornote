@@ -44,6 +44,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.thornotes.capture.CaptureDebugLog
 import com.thornotes.data.NotebookRepository
 import com.thornotes.data.models.AppSettings
 import com.thornotes.ocr.TextRecognizer
@@ -67,6 +68,7 @@ fun SettingsScreen(
     val cropEnabled by settings.cropEnabled.collectAsState()
     val ocrLanguage by settings.ocrLanguage.collectAsState()
     val floatingToggleEnabled by settings.floatingToggleEnabled.collectAsState()
+    val captureDebugLogEnabled by settings.captureDebugLogEnabled.collectAsState()
     val paddleStatus by textRecognizer.paddleOcr.assets.status.collectAsState()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -219,6 +221,38 @@ fun SettingsScreen(
                         onClick = onShowWelcome,
                         modifier = Modifier.fillMaxWidth(),
                     )
+                }
+            }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+
+            SettingsSection(title = "Diagnostics") {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SettingsOption(
+                        label = if (captureDebugLogEnabled) "Capture Log On" else "Capture Log Off",
+                        selected = captureDebugLogEnabled,
+                        onClick = {
+                            settings.setCaptureDebugLogEnabled(!captureDebugLogEnabled)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    if (captureDebugLogEnabled) {
+                        Text(
+                            text = "Capture events are written to ${CaptureDebugLog.file(context).absolutePath}. The file is capped at 128 KB.",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            lineHeight = 18.sp,
+                        )
+                        SettingsOption(
+                            label = "Clear Capture Log",
+                            selected = false,
+                            onClick = {
+                                runCatching { CaptureDebugLog.file(context).delete() }
+                                Toast.makeText(context, "Capture log cleared.", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
                 }
             }
 

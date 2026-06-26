@@ -15,13 +15,17 @@ import android.os.SystemClock
 import android.util.DisplayMetrics
 import android.util.Log
 import android.view.WindowManager
+import com.thornotes.data.models.AppSettings
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
 
-class ScreenCaptureManager(private val context: Context) {
+class ScreenCaptureManager(
+    private val context: Context,
+    private val settings: AppSettings,
+) {
 
     companion object {
         private const val TAG = "ThorNotes"
@@ -37,6 +41,7 @@ class ScreenCaptureManager(private val context: Context) {
     private var captureHeight = 0
     private var captureDensity = 0
     private var pendingCapture: kotlinx.coroutines.CancellableContinuation<Bitmap?>? = null
+    private var cachedFrame: Bitmap? = null
     private val captureThread = HandlerThread("ThorNotesScreenCapture").apply { start() }
     private val handler = Handler(captureThread.looper)
     private val captureMutex = Mutex()
@@ -61,9 +66,13 @@ class ScreenCaptureManager(private val context: Context) {
 
     fun setProjection(projection: MediaProjection) {
         Log.d(TAG, "MediaProjection received")
+        captureLog("projection_received replacingExisting=${mediaProjection != null}")
         mediaProjection?.unregisterCallback(projectionCallback)
         mediaProjection = projection
         projection.registerCallback(projectionCallback, handler)
+        handler.post {
+            cleanupFrameCaptureOnHandler()
+        }
         onProjectionReady?.invoke()
         onProjectionReady = null
     }
@@ -77,8 +86,10 @@ class ScreenCaptureManager(private val context: Context) {
     }
 
     suspend fun captureScreen(): Bitmap? {
+        captureLog("capture_request ready=${mediaProjection != null}")
         if (!captureMutex.tryLock()) {
             Log.w(TAG, "Ignoring overlapping screen capture request")
+            captureLog("capture_rejected reason=overlap")
             return null
         }
 
@@ -86,14 +97,17 @@ class ScreenCaptureManager(private val context: Context) {
             val now = SystemClock.elapsedRealtime()
             if (now - lastCaptureStartedAt < CAPTURE_COOLDOWN_MS) {
                 Log.w(TAG, "Ignoring rapid screen capture request")
+                captureLog("capture_rejected reason=cooldown elapsed=${now - lastCaptureStartedAt}")
                 return null
             }
             lastCaptureStartedAt = now
+            captureLog("capture_started")
 
             withTimeoutOrNull(CAPTURE_TIMEOUT_MS) {
                 captureSingleFrame()
             } ?: run {
                 Log.e(TAG, "Timed out waiting for screen capture")
+                captureLog("capture_timeout")
                 handler.post {
                     clearPendingCaptureOnHandler()
                 }
@@ -119,24 +133,29 @@ class ScreenCaptureManager(private val context: Context) {
 
     private fun captureSingleFrameOnHandler(continuation: kotlinx.coroutines.CancellableContinuation<Bitmap?>) {
         if (pendingCapture != null) {
+            captureLog("capture_rejected_on_handler reason=pending_capture")
             if (continuation.isActive) continuation.resume(null)
             return
         }
 
         if (!ensureCaptureSessionOnHandler()) {
+            captureLog("capture_failed_on_handler reason=session_unavailable")
             if (continuation.isActive) continuation.resume(null)
             return
         }
 
         val reader = imageReader
         if (reader != null) {
-            val immediateBitmap = acquireBitmapFromReaderOnHandler(reader)
+            val immediateBitmap = takeCachedFrameOnHandler()
+                ?: acquireBitmapFromReaderOnHandler(reader)
             if (immediateBitmap != null) {
+                captureLog("capture_complete source=immediate width=${immediateBitmap.width} height=${immediateBitmap.height}")
                 if (continuation.isActive) continuation.resume(immediateBitmap)
                 return
             }
         }
 
+        captureLog("capture_pending waiting_for_image")
         pendingCapture = continuation
     }
 
@@ -144,6 +163,7 @@ class ScreenCaptureManager(private val context: Context) {
         val projection = mediaProjection
         if (projection == null) {
             Log.e(TAG, "captureScreen called but mediaProjection is null")
+            captureLog("capture_session_unavailable reason=no_projection")
             return false
         }
 
@@ -159,16 +179,19 @@ class ScreenCaptureManager(private val context: Context) {
             captureHeight == height &&
             captureDensity == density
         ) {
+            captureLog("capture_session_reused width=$width height=$height density=$density cached=${cachedFrame != null}")
             return true
         }
 
         cleanupFrameCaptureOnHandler()
         Log.d(TAG, "Creating capture session: ${width}x${height} @ ${density}dpi")
+        captureLog("capture_session_creating width=$width height=$height density=$density")
 
         val reader = try {
             ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 3)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to create ImageReader", e)
+            captureLog("image_reader_create_failed error=${e.javaClass.simpleName}")
             return false
         }
         imageReader = reader
@@ -190,24 +213,30 @@ class ScreenCaptureManager(private val context: Context) {
             captureHeight = height
             captureDensity = density
             Log.d(TAG, "VirtualDisplay created")
+            captureLog("virtual_display_created width=$width height=$height density=$density")
             return true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to create VirtualDisplay", e)
+            captureLog("virtual_display_create_failed error=${e.javaClass.simpleName}")
             cleanupFrameCaptureOnHandler()
             return false
         }
     }
 
     private fun handleImageAvailableOnHandler(reader: ImageReader) {
+        val bitmap = acquireBitmapFromReaderOnHandler(reader)
         val continuation = pendingCapture
         if (continuation == null) {
+            if (bitmap != null) {
+                replaceCachedFrameOnHandler(bitmap)
+            }
             return
         }
 
-        val bitmap = acquireBitmapFromReaderOnHandler(reader)
         if (bitmap == null) {
             completePendingCaptureOnHandler(null)
         } else {
+            captureLog("capture_complete source=listener width=${bitmap.width} height=${bitmap.height}")
             completePendingCaptureOnHandler(bitmap)
         }
     }
@@ -220,6 +249,7 @@ class ScreenCaptureManager(private val context: Context) {
         }
         if (image == null) {
             Log.e(TAG, "acquireLatestImage returned null")
+            captureLog("image_acquire_empty")
             return null
         }
 
@@ -239,6 +269,7 @@ class ScreenCaptureManager(private val context: Context) {
             return bitmap
         } catch (e: Throwable) {
             Log.e(TAG, "Failed to convert screen capture", e)
+            captureLog("image_convert_failed error=${e.javaClass.simpleName}")
             closeImage()
             return null
         }
@@ -247,13 +278,28 @@ class ScreenCaptureManager(private val context: Context) {
     private fun completePendingCaptureOnHandler(bitmap: Bitmap?) {
         val continuation = pendingCapture ?: return
         pendingCapture = null
-        if (continuation.isActive) continuation.resume(bitmap)
+        if (continuation.isActive) {
+            continuation.resume(bitmap)
+        } else {
+            bitmap?.recycle()
+        }
     }
 
     private fun clearPendingCaptureOnHandler() {
         if (pendingCapture != null) {
         }
         pendingCapture = null
+    }
+
+    private fun takeCachedFrameOnHandler(): Bitmap? {
+        val bitmap = cachedFrame ?: return null
+        cachedFrame = null
+        return bitmap
+    }
+
+    private fun replaceCachedFrameOnHandler(bitmap: Bitmap) {
+        cachedFrame?.recycle()
+        cachedFrame = bitmap
     }
 
     fun release() {
@@ -269,15 +315,22 @@ class ScreenCaptureManager(private val context: Context) {
     private fun cleanupFrameCaptureOnHandler() {
         clearPendingCaptureOnHandler()
         if (virtualDisplay != null || imageReader != null) {
+            captureLog("capture_session_cleanup display=${virtualDisplay != null} reader=${imageReader != null} cached=${cachedFrame != null}")
         }
         virtualDisplay?.release()
         imageReader?.setOnImageAvailableListener(null, null)
         imageReader?.close()
+        cachedFrame?.recycle()
+        cachedFrame = null
         virtualDisplay = null
         imageReader = null
         captureWidth = 0
         captureHeight = 0
         captureDensity = 0
+    }
+
+    private fun captureLog(event: String) {
+        CaptureDebugLog.append(context, settings.captureDebugLogEnabled.value, event)
     }
 
     private fun imageToBitmap(image: android.media.Image, width: Int, height: Int): Bitmap {
