@@ -317,6 +317,13 @@ fun MainScreen(
                         onDeleteNotebookPage = notebook::deletePage,
                         onSettingsClick = onSettingsClick,
                         onTimeDoubleTap = { screenBlackout = true },
+                        onBatteryDoubleTap = {
+                            currentPage = if (currentPage == NotebookPage.NOTEBOOK) {
+                                NotebookPage.DICTIONARY
+                            } else {
+                                NotebookPage.NOTEBOOK
+                            }
+                        },
                     )
                 }
             },
@@ -408,6 +415,7 @@ private fun NotebookTopBarTitle(
     onDeleteNotebookPage: (String) -> Unit,
     onSettingsClick: () -> Unit,
     onTimeDoubleTap: () -> Unit,
+    onBatteryDoubleTap: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -430,7 +438,7 @@ private fun NotebookTopBarTitle(
             modifier = Modifier.weight(1f),
         )
 
-        BatteryStatus()
+        BatteryStatus(onDoubleTap = onBatteryDoubleTap)
     }
 }
 
@@ -471,7 +479,7 @@ private fun TimeStatus(onDoubleTap: () -> Unit) {
 }
 
 @Composable
-private fun BatteryStatus() {
+private fun BatteryStatus(onDoubleTap: () -> Unit) {
     val context = LocalContext.current
     var battery by remember { mutableStateOf(readBatterySnapshot(context)) }
 
@@ -492,7 +500,10 @@ private fun BatteryStatus() {
     Row(
         modifier = Modifier
             .width(44.dp)
-            .height(36.dp),
+            .height(36.dp)
+            .pointerInput(onDoubleTap) {
+                detectTapGestures(onDoubleTap = { onDoubleTap() })
+            },
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {

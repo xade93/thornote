@@ -76,6 +76,7 @@ fun HelpScreen(
             HelpDivider()
 
             HelpSection("Dictionary")
+            HelpBody("Double-tap the battery percentage in the top-right corner to switch between the Notebook and Dictionary.")
             HelpBody(
                 "The Dictionary page uses manual English input. Type an English word, then look it up " +
                     "to see offline definitions, examples, and synonyms from Open English WordNet."
