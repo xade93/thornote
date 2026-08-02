@@ -1610,21 +1610,7 @@ private fun NotebookEntryView(
                             },
                             shape = RoundedCornerShape(6.dp),
                         )
-                        .clip(RoundedCornerShape(6.dp))
-                        .pointerInput(entry.id) {
-                            detectTapGestures(
-                                onTap = {
-                                    val now = SystemClock.uptimeMillis()
-                                    if (now - lastImageTapAt <= DoubleTapWindowMillis) {
-                                        onTogglePin(entry.id)
-                                        lastImageTapAt = 0L
-                                    } else {
-                                        lastImageTapAt = now
-                                    }
-                                },
-                                onLongPress = { onToggleStar(entry.id) },
-                            )
-                        },
+                        .clip(RoundedCornerShape(6.dp)),
                 ) {
                     TextChunkEditor(
                         text = entry.text,
