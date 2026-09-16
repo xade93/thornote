@@ -25,6 +25,8 @@ jobs:
           cache: gradle
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
+        with:
+          packages: ''
       - name: Install Android build tools
         run: sdkmanager 'platforms;android-35' 'build-tools;34.0.0' 'ndk;21.1.6352462' 'cmake;3.10.2.4988404'
       - name: Configure release signing
