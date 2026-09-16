@@ -55,7 +55,7 @@ fun CropScreen(
 
     // Initialize from saved crop or default to full
     val savedCrop = settings.cropRegion
-    val hasSavedCrop = settings.cropEnabled.value
+    val hasSavedCrop = remember { settings.cropEnabled.value }
     var startOffset by remember { mutableStateOf<Offset?>(
         if (hasSavedCrop) Offset(savedCrop.left, savedCrop.top) else null
     ) }

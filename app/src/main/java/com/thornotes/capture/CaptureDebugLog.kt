@@ -2,6 +2,9 @@ package com.thornotes.capture
 
 import android.content.Context
 import android.os.SystemClock
+import android.os.Build
+import com.thornotes.data.models.AppSettings
+import java.io.OutputStream
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -13,6 +16,26 @@ object CaptureDebugLog {
     private const val KEEP_BYTES = 96 * 1024
     private val lock = Any()
     private val timestampFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
+
+    fun append(context: Context, event: String) {
+        val enabled = context.getSharedPreferences(AppSettings.PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(AppSettings.KEY_CAPTURE_DEBUG_LOG_ENABLED, false)
+        append(context, enabled, event)
+    }
+
+    fun session(context: Context) {
+        val info = context.packageManager.getPackageInfo(context.packageName, 0)
+        append(context, "session version=${info.versionName} device=${Build.MANUFACTURER}/${Build.MODEL} android=${Build.VERSION.RELEASE} sdk=${Build.VERSION.SDK_INT}")
+    }
+
+    fun export(context: Context, output: OutputStream) = synchronized(lock) {
+        file(context).inputStream().use { it.copyTo(output) }
+    }
+
+    fun clear(context: Context) = synchronized(lock) {
+        val logFile = file(context)
+        check(!logFile.exists() || logFile.delete()) { "Could not clear diagnostics" }
+    }
 
     fun file(context: Context): File {
         val dir = context.getExternalFilesDir(null) ?: context.filesDir

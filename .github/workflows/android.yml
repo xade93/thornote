@@ -1,0 +1,90 @@
+name: Android
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+      - name: Install Android build tools
+        run: sdkmanager 'platforms;android-35' 'build-tools;34.0.0' 'ndk;21.1.6352462' 'cmake;3.10.2.4988404'
+      - name: Configure release signing
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PROPERTIES: ${{ secrets.ANDROID_KEYSTORE_PROPERTIES }}
+        run: |
+          : "${KEYSTORE_BASE64:?Set ANDROID_KEYSTORE_BASE64 in repository secrets}"
+          : "${KEYSTORE_PROPERTIES:?Set ANDROID_KEYSTORE_PROPERTIES in repository secrets}"
+          umask 077
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > release.keystore
+          printf '%s\nstoreFile=../release.keystore\n' "$KEYSTORE_PROPERTIES" > keystore.properties
+      - name: Build and lint
+        run: bash ./gradlew --no-daemon assembleDebug assembleRelease lintDebug
+      - name: Verify release version and signature
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          metadata = json.loads(Path('app/build/outputs/apk/release/output-metadata.json').read_text())
+          version = metadata['elements'][0]['versionName']
+          assert os.environ['GITHUB_REF_NAME'] == f'v{version}', 'Tag must match APK versionName'
+          PY
+          "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify app/build/outputs/apk/release/*.apk
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload signed release APK
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk
+          path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+          retention-days: 14
+      - name: Remove signing files
+        if: always()
+        run: rm -f release.keystore keystore.properties
+
+  release:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-apk
+          path: apk
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: gh release create "$RELEASE_TAG" apk/*.apk --verify-tag --draft --generate-notes

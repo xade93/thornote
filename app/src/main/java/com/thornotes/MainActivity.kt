@@ -68,6 +68,7 @@ class MainActivity : ComponentActivity() {
                 }
             },
         )
+        com.thornotes.capture.CaptureDebugLog.session(this)
         settings = AppSettings(this)
         captureManager = ScreenCaptureManager(this, settings)
         textRecognizer = TextRecognizer(this)
@@ -179,6 +180,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        com.thornotes.capture.CaptureDebugLog.append(this, "activity_resume")
         syncFloatingToggleService()
     }
 
@@ -230,6 +232,11 @@ class MainActivity : ComponentActivity() {
             Log.w(TAG, "Input command failed: ${command.joinToString(" ")}", e)
             false
         }
+    }
+
+    override fun onStop() {
+        com.thornotes.capture.CaptureDebugLog.append(this, "activity_stop")
+        super.onStop()
     }
 
     override fun onDestroy() {

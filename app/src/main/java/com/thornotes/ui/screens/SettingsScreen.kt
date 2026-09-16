@@ -87,6 +87,21 @@ fun SettingsScreen(
         val stamp = SimpleDateFormat("yyyy-MM-dd-HHmm", Locale.US).format(Date())
         "thornotes-backup-$stamp.zip"
     }
+    val exportDiagnosticsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/plain"),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openOutputStream(uri)?.use { output ->
+                        CaptureDebugLog.export(context, output)
+                    } ?: error("Could not open selected file.")
+                }
+            }
+            Toast.makeText(context, if (result.isSuccess) "Diagnostics exported." else "Could not export diagnostics.", Toast.LENGTH_LONG).show()
+        }
+    }
     val exportBackupLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/zip"),
     ) { uri ->
@@ -250,31 +265,43 @@ fun SettingsScreen(
 
             SettingsSection(title = "Diagnostics") {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SettingsRow(label = "Capture log") {
+                    SettingsRow(label = "Diagnostic log") {
                         CompactSettingsOption(
                             label = if (captureDebugLogEnabled) "On" else "Off",
                             selected = captureDebugLogEnabled,
                             onClick = {
-                                settings.setCaptureDebugLogEnabled(!captureDebugLogEnabled)
+                                val enabled = !captureDebugLogEnabled
+                                settings.setCaptureDebugLogEnabled(enabled)
+                                if (enabled) CaptureDebugLog.session(context)
                             },
                         )
                     }
                     if (captureDebugLogEnabled) {
                         Text(
-                            text = "Capture events are written to ${CaptureDebugLog.file(context).absolutePath}. The file is capped at 128 KB.",
+                            text = "Records capture, text input, and save events. Note contents and typed characters are not recorded. The log keeps the most recent 128 KB; export it soon after reproducing the issue.",
                             fontSize = 13.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             lineHeight = 18.sp,
                         )
                         SettingsRow(label = "Log file") {
-                            CompactSettingsOption(
-                                label = "Clear",
-                                selected = false,
-                                onClick = {
-                                    runCatching { CaptureDebugLog.file(context).delete() }
-                                    Toast.makeText(context, "Capture log cleared.", Toast.LENGTH_SHORT).show()
-                                },
-                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                CompactSettingsOption(
+                                    label = "Export",
+                                    selected = false,
+                                    onClick = { exportDiagnosticsLauncher.launch("thornotes-diagnostics-${System.currentTimeMillis()}.txt") },
+                                )
+                                CompactSettingsOption(
+                                    label = "Clear",
+                                    selected = false,
+                                    onClick = {
+                                        val result = runCatching {
+                                            CaptureDebugLog.clear(context)
+                                            CaptureDebugLog.session(context)
+                                        }
+                                        Toast.makeText(context, if (result.isSuccess) "Diagnostics cleared." else "Could not clear diagnostics.", Toast.LENGTH_SHORT).show()
+                                    },
+                                )
+                            }
                         }
                     }
                 }

@@ -1,6 +1,7 @@
 package com.thornotes.data
 
 import android.content.Context
+import com.thornotes.capture.CaptureDebugLog
 import android.graphics.Bitmap
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -83,6 +84,7 @@ class NotebookRepository(private val context: Context) {
 
     @Synchronized
     fun selectPage(pageId: String) {
+        CaptureDebugLog.append(context, "page_select from=${_currentPageId.value} to=$pageId")
         if (storedPages.any { it.id == pageId }) {
             _currentPageId.value = pageId
             saveLastPageId(pageId)
@@ -262,6 +264,7 @@ class NotebookRepository(private val context: Context) {
 
     @Synchronized
     fun updateText(id: String, text: String) {
+        CaptureDebugLog.append(context, "text_save page=${_currentPageId.value} block=$id chars=${text.length} found=${allEntries.any { it.id == id }}")
         allEntries = allEntries.map { entry ->
             if (entry.id == id) entry.copy(text = text) else entry
         }
@@ -320,6 +323,7 @@ class NotebookRepository(private val context: Context) {
     }
 
     private fun addEntry(entry: NotebookEntry): NotebookEntry {
+        CaptureDebugLog.append(context, "entry_create page=${entry.pageId} block=${entry.id} type=${entry.type} chars=${entry.text.length}")
         allEntries = listOf(entry) + allEntries
         saveCurrentEntries()
         touchCurrentPage()
@@ -397,18 +401,27 @@ class NotebookRepository(private val context: Context) {
         return try {
             val type = object : TypeToken<List<NotebookEntry>>() {}.type
             val entries: List<NotebookEntry> = gson.fromJson(file.readText(), type) ?: emptyList()
+            CaptureDebugLog.append(context, "entries_load page=$pageId blocks=${entries.size} textLengths=${entries.filter { it.type == NotebookEntryType.TEXT_CHUNK }.joinToString { "${it.id}:${it.text.length}" }}")
             entries.map { entry ->
                 val withPage = if (entry.pageId.isBlank()) entry.copy(pageId = pageId) else entry
                 withPage.copy(imagePath = withPage.imagePath?.toStoredImagePath())
             }
-        } catch (_: Exception) {
+        } catch (exception: Exception) {
+            CaptureDebugLog.append(context, "load_failed page=$pageId error=${exception.javaClass.simpleName}")
             emptyList()
         }
     }
 
     private fun saveCurrentEntries() {
         val pageId = ensureCurrentPageId()
-        entriesFile(pageId).writeText(gson.toJson(allEntries))
+        CaptureDebugLog.append(context, "write_start page=$pageId blocks=${allEntries.size}")
+        try {
+            entriesFile(pageId).writeText(gson.toJson(allEntries))
+            CaptureDebugLog.append(context, "write_ok page=$pageId bytes=${entriesFile(pageId).length()}")
+        } catch (exception: Exception) {
+            CaptureDebugLog.append(context, "write_failed page=$pageId error=${exception.javaClass.simpleName}")
+            throw exception
+        }
     }
 
     private fun importLegacyEntriesIfNeeded() {

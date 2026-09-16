@@ -90,6 +90,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.thornotes.analysis.EnglishDictionaryLookup
+import com.thornotes.capture.CaptureDebugLog
 import com.thornotes.capture.ScreenCaptureManager
 import com.thornotes.capture.ScreenCaptureService
 import com.thornotes.data.NotebookRepository
@@ -1430,6 +1431,7 @@ private fun CompactActionButton(
 
 @Composable
 private fun TextChunkEditor(
+    blockId: String,
     text: String,
     textSize: androidx.compose.ui.unit.TextUnit,
     onTextChange: (String) -> Unit,
@@ -1461,7 +1463,11 @@ private fun TextChunkEditor(
                 imeOptions = EditorInfo.IME_ACTION_DONE or
                     EditorInfo.IME_FLAG_NO_EXTRACT_UI or
                     EditorInfo.IME_FLAG_NO_FULLSCREEN
+                setOnFocusChangeListener { _, focused ->
+                    CaptureDebugLog.append(viewContext, "focus block=$blockId focused=$focused")
+                }
                 setOnEditorActionListener { view, actionId, event ->
+                    CaptureDebugLog.append(viewContext, "ime_action block=$blockId action=$actionId")
                     val isDone = actionId == EditorInfo.IME_ACTION_DONE
                     val isEnterUp = event?.keyCode == KeyEvent.KEYCODE_ENTER &&
                         event.action == KeyEvent.ACTION_UP
@@ -1479,6 +1485,7 @@ private fun TextChunkEditor(
                         override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
                         override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                             val updated = s?.toString().orEmpty()
+                            CaptureDebugLog.append(viewContext, "text_change block=$blockId chars=${updated.length} start=$start removed=$before added=$count changed=${updated != draftText}")
                             if (updated != draftText) {
                                 draftText = updated
                                 latestOnTextChange(updated)
@@ -1491,6 +1498,7 @@ private fun TextChunkEditor(
         },
         update = { view ->
             if (view.text.toString() != draftText) {
+                CaptureDebugLog.append(context, "editor_sync block=$blockId fromChars=${view.text.length} toChars=${draftText.length}")
                 view.setText(draftText)
                 view.setSelection(draftText.length)
             }
@@ -1624,6 +1632,7 @@ private fun NotebookEntryView(
                         .clip(RoundedCornerShape(6.dp)),
                 ) {
                     TextChunkEditor(
+                        blockId = entry.id,
                         text = entry.text,
                         textSize = bodySize,
                         onTextChange = { onTextChange(entry.id, it) },

@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.StateFlow
 class AppSettings(context: Context) {
 
     companion object {
-        private const val PREFS_NAME = "thornotes_prefs"
+        internal const val PREFS_NAME = "thornotes_prefs"
         private const val KEY_TEXT_SIZE = "text_size"
         private const val KEY_CROP_LEFT = "crop_left"
         private const val KEY_CROP_TOP = "crop_top"
@@ -18,7 +18,7 @@ class AppSettings(context: Context) {
         private const val KEY_OCR_LANGUAGE = "ocr_language"
         private const val KEY_FLOATING_TOGGLE_ENABLED = "floating_toggle_enabled"
         private const val KEY_WELCOME_SEEN = "welcome_seen"
-        private const val KEY_CAPTURE_DEBUG_LOG_ENABLED = "capture_debug_log_enabled"
+        internal const val KEY_CAPTURE_DEBUG_LOG_ENABLED = "capture_debug_log_enabled"
         private const val KEY_THEME_COLOR = "theme_color"
 
         const val TEXT_SIZE_SMALL = 0
