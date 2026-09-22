@@ -39,46 +39,11 @@ JAVA_HOME=/usr/lib/jvm/java-17-openjdk ./gradlew installDebug
 
 Requires Android SDK compileSdk 35 and JDK 17.
 
-## CI and releases
-
-[Android CI](.github/workflows/android.yml) builds debug and release variants and
-runs Android lint on pushes to `main`, pull requests, and manual runs from the
-Actions tab. Download the debug APK from the run's artifacts. CI does not run
-device/instrumentation tests.
-
-For automatic signed releases, add these repository secrets under **Settings →
-Secrets and variables → Actions → New repository secret**:
-
-- `ANDROID_KEYSTORE_BASE64`: Base64-encoded contents of the existing release
-  keystore (use `base64 -w0 /absolute/path/to/your-release.keystore`).
-- `ANDROID_KEYSTORE_PROPERTIES`: The full contents of your local
-  `keystore.properties`, including `storePassword`, `keyAlias`, and `keyPassword`.
-  CI overrides `storeFile` to point to its temporary copy of the keystore.
-
-Use the existing signing key so users can update installed releases. Never commit
-either secret. Signing secrets are used only on tag pushes, not pull requests.
-
-To release:
-
-1. Update `versionName` and increase `versionCode` in `app/build.gradle.kts`.
-2. Commit the release changes and push them to your repository.
-3. Tag that commit with `v` followed by `versionName`, then push the tag. For
-   example, for version `0.4.4` and this checkout's `thornote` remote:
-
-   ```bash
-   git tag -a v0.4.4 -m 'ThorNotes 0.4.4'
-   git push thornote v0.4.4
-   ```
-
-CI verifies that the tag matches the built APK version and that the APK is signed,
-then creates a draft GitHub Release with the APK attached and generated notes.
-Review the draft and publish it. Missing signing secrets fail the tag build.
-An existing release for the tag causes draft creation to fail rather than replacing
-its APK; use a new version/tag for a corrected release.
-
 ## Credits
 
 ThorNotes started from work based on ThorTranslate. Credit to ThorTranslate (ie ThorLens) author for the initial program.
+
+Disclosure: LLM is used in this work extensively (Codex).
 
 ## License
 
