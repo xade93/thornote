@@ -1,4 +1,5 @@
 # ThorNotes
+[![Android](https://github.com/xade93/thornote/actions/workflows/android.yml/badge.svg)](https://github.com/xade93/thornote/actions/workflows/android.yml)
 
 ThorNotes is a small bottom-screen notebook app with dual screen handheld in mind.
 
