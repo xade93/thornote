@@ -15,14 +15,13 @@ Screenshots:
 
 ## Main Features
 
-- **Save screenshots** into notebook pages.
+- **Save screenshots, text notes** into notebook pages; **Pin/star** important screenshots.
 - **OCR** a selected screen region and save the recognized text. Two methods are provided, both are fully offline. Multilingual support.
-- Keep multiple notebook pages, so different games can have separate notes; Browse saved screenshots with thumbnails for quick jumping.
-- **Pin/star** important screenshots so they stay easy to find.
+- Keep **multiple notebook pages**, so different games can have separate notes; Browse saved screenshots with thumbnails for quick jumping.
 - Double-tap the time to turn the bottom screen black for **OLED blackout mode**, then double-tap again to restore.
-- Use optional **floating overlay button** to hide or restore ThorNotes while playing, to use other second screen app. Coexist well with other floating apps e.g. DS Overlay.
+- Optional **floating overlay button** to hide or restore ThorNotes while playing, to use other second screen app. Coexist well with other floating apps e.g. DS Overlay.
 - **Backup and restore** notebook from Settings.
-- *TBD* Use the offline English dictionary page for quick lookup.
+- Use the offline English **dictionary** page for quick lookup.
 
 ## Data and Backup
 
