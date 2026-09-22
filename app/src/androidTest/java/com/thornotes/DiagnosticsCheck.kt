@@ -17,6 +17,18 @@ class DiagnosticsCheck : Instrumentation() {
     override fun onStart() {
         // Use the test package so the user's diagnostics and preferences are untouched.
         val result = runCatching {
+            // Only test-package preferences are cleared here.
+            context.getSharedPreferences("thornotes_prefs", 0).edit().clear().commit()
+            val settings = com.thornotes.data.models.AppSettings(context)
+            check(!settings.archiveNoticeSeen.value)
+            settings.markArchiveNoticeSeen()
+            check(com.thornotes.data.models.AppSettings(context).archiveNoticeSeen.value)
+            context.getSharedPreferences("thornotes_prefs", 0).edit().clear().commit()
+            val firstRun = com.thornotes.data.models.AppSettings(context)
+            firstRun.markWelcomeSeen()
+            val reopened = com.thornotes.data.models.AppSettings(context)
+            check(reopened.welcomeSeen.value && reopened.archiveNoticeSeen.value)
+            checkArchives(context)
             CaptureDebugLog.clear(context)
             CaptureDebugLog.append(context, false, "disabled_event")
             check(!CaptureDebugLog.file(context).exists())
@@ -32,6 +44,6 @@ class DiagnosticsCheck : Instrumentation() {
             check(!CaptureDebugLog.file(context).exists())
         }
         finish(if (result.isSuccess) Activity.RESULT_OK else Activity.RESULT_CANCELED,
-            Bundle().apply { putString("stream", result.exceptionOrNull()?.stackTraceToString() ?: "Diagnostics checks passed\n") })
+            Bundle().apply { putString("stream", result.exceptionOrNull()?.stackTraceToString() ?: "Diagnostics and archive checks passed\n") })
     }
 }

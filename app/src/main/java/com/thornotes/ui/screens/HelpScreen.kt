@@ -66,7 +66,7 @@ fun HelpScreen(
             HelpDivider()
 
             HelpSection("Notebook")
-            HelpBody("Each visual novel, novel, or game can have its own notebook page. Use the page selector to switch, + to create, and the page menu to rename or delete a page.")
+            HelpBody("Each visual novel, novel, or game can have its own notebook page. Use the page selector to switch, + to create, and the page menu to rename, archive, or delete a page. Open Archived pages in the selector to restore a page to its previous position.")
             HelpBody("Each page shows its current entry count and storage usage.")
             HelpBody("Screenshot captures the whole top screen and adds it to the notebook stream.")
             HelpBody("The bottom bar captures context: Shot saves the whole screen, and OCR reads the saved region. Long-press OCR to change the region.")

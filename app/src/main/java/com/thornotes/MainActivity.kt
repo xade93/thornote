@@ -17,6 +17,13 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
@@ -89,6 +96,7 @@ class MainActivity : ComponentActivity() {
                 var cropScreenshot by remember { mutableStateOf<Bitmap?>(null) }
                 val floatingToggleEnabled by settings.floatingToggleEnabled.collectAsState()
                 val welcomeSeen by settings.welcomeSeen.collectAsState()
+                val archiveNoticeSeen by settings.archiveNoticeSeen.collectAsState()
 
                 fun clearCropScreenshot() {
                     cropScreenshot?.recycle()
@@ -103,6 +111,26 @@ class MainActivity : ComponentActivity() {
 
                 LaunchedEffect(floatingToggleEnabled) {
                     syncFloatingToggleService()
+                }
+
+                if (currentScreen == "main" && welcomeSeen && !archiveNoticeSeen) {
+                    AlertDialog(
+                        onDismissRequest = settings::markArchiveNoticeSeen,
+                        title = { Text("What’s new in v0.4.5") },
+                        text = {
+                            Text(buildAnnotatedString {
+                                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                                    append("Page Archiving\n\n")
+                                }
+                                append("You can now long-press a page to put it in ")
+                                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append("Archive") }
+                                append(". Bring it back anytime from Archived pages.")
+                            })
+                        },
+                        confirmButton = {
+                            TextButton(onClick = settings::markArchiveNoticeSeen) { Text("Got it") }
+                        },
+                    )
                 }
 
                 when (currentScreen) {

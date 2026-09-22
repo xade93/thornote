@@ -30,6 +30,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -38,6 +39,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -48,6 +50,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.thornotes.capture.CaptureDebugLog
@@ -79,6 +85,9 @@ fun SettingsScreen(
     val themeColor by settings.themeColor.collectAsState()
     val paddleStatus by textRecognizer.paddleOcr.assets.status.collectAsState()
     val context = LocalContext.current
+    val versionName = remember(context) {
+        context.packageManager.getPackageInfo(context.packageName, 0).versionName
+    }
     val scope = rememberCoroutineScope()
     var backupBusy by rememberSaveable { mutableStateOf(false) }
     var backupErrorTitle by rememberSaveable { mutableStateOf("") }
@@ -99,7 +108,7 @@ fun SettingsScreen(
                     } ?: error("Could not open selected file.")
                 }
             }
-            Toast.makeText(context, if (result.isSuccess) "Diagnostics exported." else "Could not export diagnostics.", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, if (result.isSuccess) "Log exported." else "Couldn’t export the log. Try again.", Toast.LENGTH_LONG).show()
         }
     }
     val exportBackupLauncher = rememberLauncherForActivityResult(
@@ -118,11 +127,11 @@ fun SettingsScreen(
             backupBusy = false
             result.fold(
                 onSuccess = {
-                    Toast.makeText(context, "Notebook backup exported.", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, "Backup saved.", Toast.LENGTH_LONG).show()
                 },
                 onFailure = {
-                    backupErrorTitle = "Export failed"
-                    backupErrorDetails = it.stackTraceToString()
+                    backupErrorTitle = "Couldn’t save backup"
+                    backupErrorDetails = it.message ?: "Please try again."
                 },
             )
         }
@@ -150,8 +159,8 @@ fun SettingsScreen(
                     ).show()
                 },
                 onFailure = {
-                    backupErrorTitle = "Import failed"
-                    backupErrorDetails = it.stackTraceToString()
+                    backupErrorTitle = "Couldn’t import backup"
+                    backupErrorDetails = it.message ?: "Please try again."
                 },
             )
         }
@@ -166,7 +175,7 @@ fun SettingsScreen(
             TopAppBar(
                 title = { Text("Settings", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = onBack, modifier = Modifier.semantics { contentDescription = "Back" }) {
                         Text(
                             text = "<",
                             fontSize = 24.sp,
@@ -187,13 +196,13 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 16.dp)
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             SettingsSection(title = "Appearance") {
                 Text(
-                    text = "Notebook text",
+                    text = "Text size",
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -202,19 +211,19 @@ fun SettingsScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     SettingsOption(
-                        label = "S",
+                        label = "Small",
                         selected = textSize == AppSettings.TEXT_SIZE_SMALL,
                         onClick = { settings.setTextSize(AppSettings.TEXT_SIZE_SMALL) },
                         modifier = Modifier.weight(1f),
                     )
                     SettingsOption(
-                        label = "M",
+                        label = "Medium",
                         selected = textSize == AppSettings.TEXT_SIZE_MEDIUM,
                         onClick = { settings.setTextSize(AppSettings.TEXT_SIZE_MEDIUM) },
                         modifier = Modifier.weight(1f),
                     )
                     SettingsOption(
-                        label = "L",
+                        label = "Large",
                         selected = textSize == AppSettings.TEXT_SIZE_LARGE,
                         onClick = { settings.setTextSize(AppSettings.TEXT_SIZE_LARGE) },
                         modifier = Modifier.weight(1f),
@@ -222,7 +231,7 @@ fun SettingsScreen(
                 }
 
                 Text(
-                    text = "Theme color",
+                    text = "Accent color",
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -230,15 +239,12 @@ fun SettingsScreen(
                     selectedThemeColor = themeColor,
                     onThemeColorSelected = settings::setThemeColor,
                 )
-            }
 
-            SettingsSection(title = "Overlay") {
-                SettingsRow(label = "Floating toggle") {
-                    CompactSettingsOption(
-                        label = if (floatingToggleEnabled) "On" else "Off",
-                        selected = floatingToggleEnabled,
-                        onClick = {
-                            val enable = !floatingToggleEnabled
+                SettingsRow(label = "Show floating button") {
+                    Switch(
+                        checked = floatingToggleEnabled,
+                        modifier = Modifier.semantics { contentDescription = "Show floating button" },
+                        onCheckedChange = { enable ->
                             settings.setFloatingToggleEnabled(enable)
                             if (enable && !Settings.canDrawOverlays(context)) {
                                 context.startActivity(
@@ -253,6 +259,113 @@ fun SettingsScreen(
                 }
             }
 
+            SettingsSection(title = "Text recognition") {
+                Text(
+                    text = paddleStatus.message,
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 18.sp,
+                )
+                SettingsRow(label = "PP-OCRv5") {
+                    CompactSettingsOption(
+                        label = if (paddleStatus.ready) "Refresh" else if (paddleStatus.downloading) "Downloading…" else "Download",
+                        selected = paddleStatus.ready,
+                        enabled = !paddleStatus.downloading,
+                        onClick = {
+                            scope.launch {
+                                if (paddleStatus.ready) {
+                                    textRecognizer.paddleOcr.assets.refresh()
+                                } else {
+                                    textRecognizer.paddleOcr.assets.ensureDownloaded()
+                                }
+                            }
+                        },
+                    )
+                }
+                if (paddleStatus.ready) {
+                    SettingsRow(label = "Downloaded model") {
+                        CompactSettingsOption(
+                            label = "Remove",
+                            selected = false,
+                            enabled = !paddleStatus.downloading,
+                            onClick = {
+                                scope.launch {
+                                    textRecognizer.paddleOcr.assets.uninstall()
+                                }
+                            },
+                        )
+                    }
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "This language is used when PP-OCRv5 is unavailable.",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        lineHeight = 18.sp,
+                    )
+                    SettingsRow(label = "Fallback language") {
+                        OcrLanguageDropdown(
+                            selectedLanguage = ocrLanguage,
+                            onLanguageSelected = settings::setOcrLanguage,
+                        )
+                    }
+                }
+
+                Text(
+                    text = if (cropEnabled) {
+                        "Long-press OCR on your notebook to change the capture area."
+                    } else {
+                        "Tap Set Region on your notebook to choose where OCR reads."
+                    },
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 18.sp,
+                )
+                SettingsRow(label = "Capture area") {
+                    if (cropEnabled) {
+                        CompactSettingsOption(
+                            label = "Clear",
+                            selected = false,
+                            onClick = { settings.clearCropRegion() },
+                        )
+                    } else {
+                        Text(
+                            text = "Not set",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
+            SettingsSection(title = "Backup") {
+                Text(
+                    text = "Save your pages as a ZIP file, or import a backup. Pages you already have are skipped.",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 18.sp,
+                )
+                if (backupBusy) {
+                    Text("Working… Keep ThorNotes open.", fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CompactSettingsOption(
+                        label = "Export",
+                        selected = false,
+                        enabled = !backupBusy,
+                        onClick = { exportBackupLauncher.launch(backupFileName) },
+                    )
+                    CompactSettingsOption(
+                        label = "Import",
+                        selected = false,
+                        enabled = !backupBusy,
+                        onClick = { importBackupLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) },
+                    )
+                }
+            }
+
             SettingsSection(title = "Help") {
                 SettingsRow(label = "Welcome guide") {
                     CompactSettingsOption(
@@ -261,16 +374,13 @@ fun SettingsScreen(
                         onClick = onShowWelcome,
                     )
                 }
-            }
 
-            SettingsSection(title = "Diagnostics") {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     SettingsRow(label = "Diagnostic log") {
-                        CompactSettingsOption(
-                            label = if (captureDebugLogEnabled) "On" else "Off",
-                            selected = captureDebugLogEnabled,
-                            onClick = {
-                                val enabled = !captureDebugLogEnabled
+                        Switch(
+                            checked = captureDebugLogEnabled,
+                            modifier = Modifier.semantics { contentDescription = "Diagnostic log" },
+                            onCheckedChange = { enabled ->
                                 settings.setCaptureDebugLogEnabled(enabled)
                                 if (enabled) CaptureDebugLog.session(context)
                             },
@@ -278,7 +388,7 @@ fun SettingsScreen(
                     }
                     if (captureDebugLogEnabled) {
                         Text(
-                            text = "Records capture, text input, and save events. Note contents and typed characters are not recorded. The log keeps the most recent 128 KB; export it soon after reproducing the issue.",
+                            text = "Repeat the problem, then export the log. Your note text isn’t recorded.",
                             fontSize = 13.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             lineHeight = 18.sp,
@@ -298,7 +408,7 @@ fun SettingsScreen(
                                             CaptureDebugLog.clear(context)
                                             CaptureDebugLog.session(context)
                                         }
-                                        Toast.makeText(context, if (result.isSuccess) "Diagnostics cleared." else "Could not clear diagnostics.", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, if (result.isSuccess) "Log cleared." else "Couldn’t clear the log. Try again.", Toast.LENGTH_SHORT).show()
                                     },
                                 )
                             }
@@ -307,113 +417,21 @@ fun SettingsScreen(
                 }
             }
 
-            SettingsSection(title = "Notebook Backup") {
+            SettingsSection(title = "About") {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("ThorNotes", fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface)
+                    Text("v$versionName", fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 Text(
-                    text = "Export creates a zip backup. Import adds missing pages from a ThorNotes zip backup and skips existing pages.",
-                    fontSize = 14.sp,
+                    text = "MIT License",
+                    fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    lineHeight = 20.sp,
                 )
-                SettingsRow(label = "Backup file") {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        CompactSettingsOption(
-                            label = if (backupBusy) "Busy" else "Export",
-                            selected = false,
-                            enabled = !backupBusy,
-                            onClick = { exportBackupLauncher.launch(backupFileName) },
-                        )
-                        CompactSettingsOption(
-                            label = if (backupBusy) "Busy" else "Import",
-                            selected = false,
-                            enabled = !backupBusy,
-                            onClick = { importBackupLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) },
-                        )
-                    }
-                }
-            }
-
-            SettingsSection(title = "OCR Language") {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "ThorNotes tries PP-OCRv5 first when installed. If it is missing or fails, OCR falls back to ML Kit with the selected language.",
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        lineHeight = 18.sp,
-                    )
-                    SettingsRow(label = "Language") {
-                        OcrLanguageDropdown(
-                            selectedLanguage = ocrLanguage,
-                            onLanguageSelected = settings::setOcrLanguage,
-                        )
-                    }
-                }
-            }
-
-            SettingsSection(title = "OCR Engine") {
-                Text(
-                    text = paddleStatus.message,
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    lineHeight = 20.sp,
-                )
-                SettingsRow(label = "PP-OCRv5") {
-                    CompactSettingsOption(
-                        label = if (paddleStatus.ready) "Refresh" else if (paddleStatus.downloading) "Loading" else "Download",
-                        selected = paddleStatus.ready,
-                        enabled = !paddleStatus.downloading,
-                        onClick = {
-                            scope.launch {
-                                if (paddleStatus.ready) {
-                                    textRecognizer.paddleOcr.assets.refresh()
-                                } else {
-                                    textRecognizer.paddleOcr.assets.ensureDownloaded()
-                                }
-                            }
-                        },
-                    )
-                }
-                if (paddleStatus.ready) {
-                    SettingsRow(label = "Installed engine") {
-                        CompactSettingsOption(
-                            label = "Uninstall",
-                            selected = false,
-                            enabled = !paddleStatus.downloading,
-                            onClick = {
-                                scope.launch {
-                                    textRecognizer.paddleOcr.assets.uninstall()
-                                }
-                            },
-                        )
-                    }
-                }
-            }
-
-            SettingsSection(title = "Capture Region") {
-                Text(
-                    text = if (cropEnabled) {
-                        "A fixed OCR region is saved. Long-press Region OCR on the notebook page to update it."
-                    } else {
-                        "No fixed OCR region is saved. Tap Set Region on the notebook page before Region OCR."
-                    },
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    lineHeight = 20.sp,
-                )
-                SettingsRow(label = "Fixed region") {
-                    if (cropEnabled) {
-                        CompactSettingsOption(
-                            label = "Clear",
-                            selected = false,
-                            onClick = { settings.clearCropRegion() },
-                        )
-                    } else {
-                        Text(
-                            text = "Not set",
-                            fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
             }
         }
     }
@@ -424,7 +442,7 @@ fun SettingsScreen(
                 backupErrorTitle = ""
                 backupErrorDetails = ""
             },
-            title = { Text(backupErrorTitle.ifBlank { "Backup failed" }) },
+            title = { Text(backupErrorTitle.ifBlank { "Backup didn’t finish" }) },
             text = {
                 Text(
                     text = backupErrorDetails,
@@ -524,7 +542,17 @@ private fun ThemeColorSwatch(
                 color = if (selected) accent else MaterialTheme.colorScheme.surfaceVariant,
                 shape = RoundedCornerShape(8.dp),
             )
-            .clickable { onClick() }
+            .semantics {
+                contentDescription = when (option.value) {
+                    AppSettings.THEME_COLOR_AMBER -> "Amber"
+                    AppSettings.THEME_COLOR_TEAL -> "Teal"
+                    AppSettings.THEME_COLOR_VIOLET -> "Violet"
+                    AppSettings.THEME_COLOR_RED -> "Red"
+                    else -> "Pink"
+                }
+            }
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
+            .heightIn(min = 48.dp)
             .padding(vertical = 9.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -563,7 +591,7 @@ private fun OcrLanguageDropdown(
 
     Box {
         CompactSettingsOption(
-            label = "$selectedLabel v",
+            label = "$selectedLabel ▾",
             selected = false,
             onClick = { expanded = true },
         )
@@ -616,6 +644,7 @@ private fun SettingsRow(
             text = label,
             fontSize = 14.sp,
             color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f).padding(end = 12.dp),
         )
         action()
     }
@@ -641,7 +670,8 @@ private fun CompactSettingsOption(
                     else MaterialTheme.colorScheme.surfaceVariant,
                 shape = RoundedCornerShape(8.dp),
             )
-            .clickable(enabled = enabled) { onClick() }
+            .clickable(enabled = enabled, role = Role.Button) { onClick() }
+            .heightIn(min = 48.dp)
             .padding(horizontal = 14.dp, vertical = 9.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -677,7 +707,8 @@ private fun SettingsOption(
                     else MaterialTheme.colorScheme.surfaceVariant,
                 shape = RoundedCornerShape(8.dp),
             )
-            .clickable(enabled = enabled) { onClick() }
+            .clickable(enabled = enabled, role = Role.Button) { onClick() }
+            .heightIn(min = 48.dp)
             .padding(vertical = 12.dp),
         contentAlignment = Alignment.Center,
     ) {

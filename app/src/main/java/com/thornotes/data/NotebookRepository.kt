@@ -15,6 +15,8 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
 import java.io.OutputStream
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.util.UUID
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
@@ -27,6 +29,7 @@ class NotebookRepository(private val context: Context) {
         val name: String,
         val createdAt: Long,
         val updatedAt: Long,
+        val isArchived: Boolean = false,
     )
 
     private data class ImportedStoredPage(
@@ -34,6 +37,7 @@ class NotebookRepository(private val context: Context) {
         val name: String?,
         val createdAt: Long?,
         val updatedAt: Long?,
+        val isArchived: Boolean?,
     )
 
     private data class ImportedNotebookEntry(
@@ -85,7 +89,7 @@ class NotebookRepository(private val context: Context) {
     @Synchronized
     fun selectPage(pageId: String) {
         CaptureDebugLog.append(context, "page_select from=${_currentPageId.value} to=$pageId")
-        if (storedPages.any { it.id == pageId }) {
+        if (storedPages.any { it.id == pageId && !it.isArchived }) {
             _currentPageId.value = pageId
             saveLastPageId(pageId)
             refresh()
@@ -121,6 +125,25 @@ class NotebookRepository(private val context: Context) {
             savePages()
             refresh()
         }
+    }
+
+    @Synchronized
+    fun setPageArchived(pageId: String, archived: Boolean) {
+        val page = storedPages.firstOrNull { it.id == pageId } ?: return
+        if (page.isArchived == archived) return
+        var updatedPages = storedPages.map {
+            if (it.id == pageId) it.copy(isArchived = archived) else it
+        }
+        val defaultPage = if (updatedPages.none { !it.isArchived }) createStoredPage("Default") else null
+        if (defaultPage != null) updatedPages = listOf(defaultPage) + updatedPages
+        try {
+            savePages(updatedPages)
+        } catch (exception: Exception) {
+            defaultPage?.let { pageDir(it.id).deleteRecursively() }
+            throw exception
+        }
+        storedPages = updatedPages
+        refresh()
     }
 
     @Synchronized
@@ -204,6 +227,7 @@ class NotebookRepository(private val context: Context) {
                         name = name,
                         createdAt = page.createdAt ?: 0L,
                         updatedAt = page.updatedAt ?: page.createdAt ?: 0L,
+                        isArchived = page.isArchived ?: false,
                     )
                 }
             }
@@ -344,13 +368,19 @@ class NotebookRepository(private val context: Context) {
                 updatedAt = page.updatedAt,
                 sizeBytes = directorySize(pageDir(page.id)),
                 entryCount = entries.size,
+                isArchived = page.isArchived,
             )
         }
     }
 
     private fun ensureCurrentPageId(): String {
-        if (_currentPageId.value.isBlank() || storedPages.none { it.id == _currentPageId.value }) {
-            _currentPageId.value = storedPages.first().id
+        if (storedPages.none { !it.isArchived }) {
+            val updatedPages = listOf(createStoredPage("Default")) + storedPages
+            savePages(updatedPages)
+            storedPages = updatedPages
+        }
+        if (storedPages.none { it.id == _currentPageId.value && !it.isArchived }) {
+            _currentPageId.value = storedPages.first { !it.isArchived }.id
             saveLastPageId(_currentPageId.value)
         }
         return _currentPageId.value
@@ -391,8 +421,18 @@ class NotebookRepository(private val context: Context) {
         }
     }
 
-    private fun savePages() {
-        atomicWriteText(metadataFile, gson.toJson(storedPages))
+    private fun savePages(pages: List<StoredPage> = storedPages) {
+        val temp = File(metadataFile.path + ".new")
+        try {
+            FileOutputStream(temp).use { output ->
+                output.write(gson.toJson(pages).encodeToByteArray())
+                output.fd.sync()
+            }
+            Files.move(temp.toPath(), metadataFile.toPath(),
+                StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+        } finally {
+            temp.delete()
+        }
     }
 
     private fun loadEntries(pageId: String): List<NotebookEntry> {

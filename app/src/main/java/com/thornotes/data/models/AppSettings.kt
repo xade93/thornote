@@ -18,6 +18,7 @@ class AppSettings(context: Context) {
         private const val KEY_OCR_LANGUAGE = "ocr_language"
         private const val KEY_FLOATING_TOGGLE_ENABLED = "floating_toggle_enabled"
         private const val KEY_WELCOME_SEEN = "welcome_seen"
+        private const val KEY_ARCHIVE_NOTICE_SEEN = "archive_notice_seen"
         internal const val KEY_CAPTURE_DEBUG_LOG_ENABLED = "capture_debug_log_enabled"
         private const val KEY_THEME_COLOR = "theme_color"
 
@@ -61,6 +62,9 @@ class AppSettings(context: Context) {
         prefs.getBoolean(KEY_WELCOME_SEEN, false)
     )
     val welcomeSeen: StateFlow<Boolean> = _welcomeSeen
+
+    private val _archiveNoticeSeen = MutableStateFlow(prefs.getBoolean(KEY_ARCHIVE_NOTICE_SEEN, false))
+    val archiveNoticeSeen: StateFlow<Boolean> = _archiveNoticeSeen
 
     private val _captureDebugLogEnabled = MutableStateFlow(
         prefs.getBoolean(KEY_CAPTURE_DEBUG_LOG_ENABLED, false)
@@ -127,7 +131,13 @@ class AppSettings(context: Context) {
         prefs.edit().putInt(KEY_THEME_COLOR, themeColor).apply()
     }
 
+    fun markArchiveNoticeSeen() {
+        _archiveNoticeSeen.value = true
+        prefs.edit().putBoolean(KEY_ARCHIVE_NOTICE_SEEN, true).apply()
+    }
+
     fun markWelcomeSeen() {
+        markArchiveNoticeSeen()
         _welcomeSeen.value = true
         prefs.edit().putBoolean(KEY_WELCOME_SEEN, true).apply()
     }

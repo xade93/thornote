@@ -316,6 +316,7 @@ fun MainScreen(
                         onCreateNotebookPage = notebook::createPage,
                         onRenameNotebookPage = notebook::renamePage,
                         onDeleteNotebookPage = notebook::deletePage,
+                        onArchiveNotebookPage = notebook::setPageArchived,
                         onSettingsClick = onSettingsClick,
                         onTimeDoubleTap = { screenBlackout = true },
                         onBatteryDoubleTap = {
@@ -414,6 +415,7 @@ private fun NotebookTopBarTitle(
     onCreateNotebookPage: (String) -> Unit,
     onRenameNotebookPage: (String, String) -> Unit,
     onDeleteNotebookPage: (String) -> Unit,
+    onArchiveNotebookPage: (String, Boolean) -> Unit,
     onSettingsClick: () -> Unit,
     onTimeDoubleTap: () -> Unit,
     onBatteryDoubleTap: () -> Unit,
@@ -435,6 +437,7 @@ private fun NotebookTopBarTitle(
             onCreatePage = onCreateNotebookPage,
             onRenamePage = onRenameNotebookPage,
             onDeletePage = onDeleteNotebookPage,
+            onArchivePage = onArchiveNotebookPage,
             onSettingsClick = onSettingsClick,
             modifier = Modifier.weight(1f),
         )
@@ -943,9 +946,19 @@ private fun NotebookPageSelector(
     onCreatePage: (String) -> Unit,
     onRenamePage: (String, String) -> Unit,
     onDeletePage: (String) -> Unit,
+    onArchivePage: (String, Boolean) -> Unit,
     onSettingsClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    var showingArchives by remember { mutableStateOf(false) }
+    fun changeArchive(pageId: String, archived: Boolean) {
+        try {
+            onArchivePage(pageId, archived)
+        } catch (_: Exception) {
+            Toast.makeText(context, "Could not save archive change. Please try again.", Toast.LENGTH_LONG).show()
+        }
+    }
     var pageMenuExpanded by remember { mutableStateOf(false) }
     var creatingPage by remember { mutableStateOf(false) }
     var pagePendingActions by remember { mutableStateOf<NotebookPageInfo?>(null) }
@@ -1010,7 +1023,7 @@ private fun NotebookPageSelector(
             shape = RoundedCornerShape(8.dp),
             tonalElevation = 2.dp,
         ) {
-            pages.forEach { page ->
+            pages.filterNot { it.isArchived }.forEach { page ->
                 NotebookPageMenuItem(
                     page = page,
                     selected = page.id == currentPage?.id,
@@ -1033,6 +1046,13 @@ private fun NotebookPageSelector(
                 },
             )
             NotebookMenuActionItem(
+                label = "Archived pages",
+                onClick = {
+                    pageMenuExpanded = false
+                    showingArchives = true
+                },
+            )
+            NotebookMenuActionItem(
                 label = "Settings",
                 onClick = {
                     pageMenuExpanded = false
@@ -1040,6 +1060,34 @@ private fun NotebookPageSelector(
                 },
             )
         }
+    }
+
+    if (showingArchives) {
+        AlertDialog(
+            onDismissRequest = { showingArchives = false },
+            title = { Text("Archived pages") },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    val archives = pages.filter { it.isArchived }
+                    if (archives.isEmpty()) Text("No archived pages")
+                    archives.forEach { page ->
+                        Column {
+                            Text(page.name, fontWeight = FontWeight.Bold)
+                            NotebookPageActionMetadata(page)
+                            TextButton(onClick = { changeArchive(page.id, false) }) {
+                                Text("Restore")
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showingArchives = false }) { Text("Close") }
+            },
+        )
     }
 
     if (creatingPage) {
@@ -1098,6 +1146,13 @@ private fun NotebookPageSelector(
                         onClick = {
                             renamedPageName = page.name
                             pagePendingRename = page
+                            pagePendingActions = null
+                        },
+                    )
+                    NotebookDialogAction(
+                        label = "Archive page",
+                        onClick = {
+                            changeArchive(page.id, true)
                             pagePendingActions = null
                         },
                     )

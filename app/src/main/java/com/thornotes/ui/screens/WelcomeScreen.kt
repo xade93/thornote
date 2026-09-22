@@ -66,7 +66,7 @@ fun WelcomeScreen(
                     bold("Tap the notebook name"),
                     plain(" to switch pages, create a page, or open "),
                     italic("settings"),
-                    plain(". Long-press a page in the menu for page details, rename, and delete."),
+                    plain(". Long-press a page in the menu for page details, rename, archive, and delete. Restore archived pages from Archived pages in the menu."),
                 ),
             )
             WelcomeItem(

@@ -18,6 +18,7 @@ data class NotebookPageInfo(
     val updatedAt: Long,
     val sizeBytes: Long = 0L,
     val entryCount: Int = 0,
+    val isArchived: Boolean = false,
 )
 
 enum class NotebookEntryType {
