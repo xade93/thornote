@@ -76,11 +76,11 @@ class MainActivity : ComponentActivity() {
             },
         )
         com.thornotes.capture.CaptureDebugLog.session(this)
-        settings = AppSettings(this)
+        settings = (application as ThorNotesApp).settings
         captureManager = ScreenCaptureManager(this, settings)
         textRecognizer = TextRecognizer(this)
         dictionary = EnglishDictionaryLookup(this)
-        notebook = NotebookRepository(this)
+        notebook = (application as ThorNotesApp).notebook
         ContextCompat.registerReceiver(
             this,
             hideAppReceiver,

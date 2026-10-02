@@ -1,6 +1,7 @@
 package com.thornotes
 
 import android.app.Service
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.hardware.display.DisplayManager
 import android.graphics.Color
@@ -10,16 +11,33 @@ import android.os.IBinder
 import android.provider.Settings
 import android.view.Display
 import android.view.Gravity
+import android.view.GestureDetector
+import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.TextView
+import android.widget.Toast
+import com.thornotes.capture.CaptureDebugLog
+import com.thornotes.capture.ScreenCaptureService
+import com.thornotes.data.models.AppSettings
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class FloatingToggleService : Service() {
 
     private var windowManager: WindowManager? = null
-    private var toggleView: View? = null
+    private var toggleView: TextView? = null
     private var overlayDisplayId = Display.DEFAULT_DISPLAY
     private var appHidden = false
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var capturing = false
+    private val app get() = application as ThorNotesApp
 
     override fun onCreate() {
         super.onCreate()
@@ -47,6 +65,7 @@ class FloatingToggleService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        scope.cancel()
         removeToggleView()
         super.onDestroy()
     }
@@ -66,6 +85,7 @@ class FloatingToggleService : Service() {
 
         val view = TextView(displayContext).apply {
             text = "T"
+            contentDescription = "ThorNotes floating button"
             textSize = 15f
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
@@ -75,7 +95,10 @@ class FloatingToggleService : Service() {
                 setColor(0xCC1A1A2E.toInt())
                 setStroke((1.5f * density).toInt(), 0xFFE91E63.toInt())
             }
-            setOnClickListener { toggleAppVisibility() }
+            setFloatingButtonActions(
+                onSingleTap = { if (!capturing) toggleAppVisibility() },
+                onDoubleTap = ::captureTopScreen,
+            )
         }
 
         val params = WindowManager.LayoutParams(
@@ -126,8 +149,91 @@ class FloatingToggleService : Service() {
         }
     }
 
+    private fun captureTopScreen() {
+        if (capturing || app.settings.floatingDoubleTapAction.value != AppSettings.FLOATING_ACTION_TOP) return
+        capturing = true
+        scope.launch {
+            val view = toggleView
+            try {
+                val manager = ScreenCaptureService.captureManager
+                check(manager?.isReady == true) {
+                    "Open ThorNotes and take one screenshot to allow screen capture, then try again."
+                }
+                showFeedback("…", Color.WHITE, "Capturing top screen")
+                if (overlayDisplayId == Display.DEFAULT_DISPLAY) {
+                    view?.alpha = 0f
+                    delay(150) // Let the top-screen capture update without the button.
+                }
+                val bitmap = manager.captureScreen() ?: error("Couldn’t capture. Wait a moment and try again.")
+                try {
+                    withContext(Dispatchers.IO) { app.notebook.addScreenshot(bitmap) }
+                } finally {
+                    bitmap.recycle()
+                }
+                showFeedback("✓", 0xFF66BB6A.toInt(), "Screenshot saved")
+                CaptureDebugLog.append(this@FloatingToggleService, "floating_capture_saved")
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                showFeedback("!", 0xFFEF5350.toInt(), "Screenshot failed")
+                Toast.makeText(this@FloatingToggleService,
+                    if (ScreenCaptureService.captureManager?.isReady != true) {
+                        "Open ThorNotes and take one screenshot to allow screen capture."
+                    } else {
+                        "Couldn’t save screenshot. Try again."
+                    }, Toast.LENGTH_LONG).show()
+                CaptureDebugLog.append(this@FloatingToggleService, "floating_capture_failed error=${error.javaClass.simpleName}")
+            } finally {
+                view?.alpha = 1f
+            }
+            try {
+                delay(1_000)
+            } finally {
+                showFeedback("T", Color.WHITE, "ThorNotes floating button")
+                capturing = false
+            }
+        }
+    }
+
+    private fun showFeedback(label: String, color: Int, description: String) {
+        toggleView?.apply {
+            text = label
+            setTextColor(color)
+            contentDescription = description
+        }
+    }
+
     companion object {
         const val ACTION_APP_VISIBLE = "com.thornotes.ACTION_APP_VISIBLE"
         const val EXTRA_DISPLAY_ID = "com.thornotes.EXTRA_DISPLAY_ID"
     }
+}
+
+@SuppressLint("ClickableViewAccessibility") // Confirmed single taps go through performClick().
+internal fun TextView.setFloatingButtonActions(onSingleTap: () -> Unit, onDoubleTap: () -> Unit) {
+    setOnClickListener { onSingleTap() }
+    val detector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
+        override fun onDown(event: MotionEvent) = true
+        override fun onSingleTapConfirmed(event: MotionEvent): Boolean {
+            performClick()
+            return true
+        }
+        override fun onDoubleTap(event: MotionEvent) = true
+        override fun onDoubleTapEvent(event: MotionEvent): Boolean {
+            if (event.actionMasked == MotionEvent.ACTION_UP) onDoubleTap()
+            return true
+        }
+    })
+    setOnTouchListener { _, event ->
+        detector.onTouchEvent(event)
+        true
+    }
+    addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+        override fun onViewAttachedToWindow(view: View) = Unit
+        override fun onViewDetachedFromWindow(view: View) {
+            val cancel = MotionEvent.obtain(0, 0, MotionEvent.ACTION_CANCEL, 0f, 0f, 0)
+            detector.onTouchEvent(cancel)
+            cancel.recycle()
+        }
+    })
 }

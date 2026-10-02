@@ -1,6 +1,7 @@
 package com.thornotes.capture
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
@@ -9,12 +10,14 @@ import android.media.ImageReader
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjection.Callback
 import android.media.projection.MediaProjectionManager
+import android.media.projection.MediaProjectionConfig
+import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.SystemClock
 import android.util.DisplayMetrics
 import android.util.Log
-import android.view.WindowManager
+import android.view.Display
 import com.thornotes.data.models.AppSettings
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -66,6 +69,12 @@ class ScreenCaptureManager(
 
     val isReady: Boolean
         get() = mediaProjection != null
+
+    fun createScreenCaptureIntent(): Intent = if (Build.VERSION.SDK_INT >= 34) {
+        projectionManager.createScreenCaptureIntent(MediaProjectionConfig.createConfigForDefaultDisplay())
+    } else {
+        projectionManager.createScreenCaptureIntent()
+    }
 
     fun setProjection(projection: MediaProjection) {
         Log.d(TAG, "MediaProjection received")
@@ -372,10 +381,10 @@ class ScreenCaptureManager(
     }
 
     private fun getScreenMetrics(): DisplayMetrics {
-        val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        val displayManager = context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
         val metrics = DisplayMetrics()
         @Suppress("DEPRECATION")
-        windowManager.defaultDisplay.getRealMetrics(metrics)
+        displayManager.getDisplay(Display.DEFAULT_DISPLAY).getRealMetrics(metrics)
         return metrics
     }
 }

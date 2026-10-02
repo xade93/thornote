@@ -297,7 +297,7 @@ fun MainScreen(
         if (captureManager.isReady) {
             runPendingCapture()
         } else {
-            val intent = captureManager.projectionManager.createScreenCaptureIntent()
+            val intent = captureManager.createScreenCaptureIntent()
             projectionLauncher.launch(intent)
         }
     }

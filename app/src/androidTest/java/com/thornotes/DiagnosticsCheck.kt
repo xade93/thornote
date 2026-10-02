@@ -20,6 +20,16 @@ class DiagnosticsCheck : Instrumentation() {
             // Only test-package preferences are cleared here.
             context.getSharedPreferences("thornotes_prefs", 0).edit().clear().commit()
             val settings = com.thornotes.data.models.AppSettings(context)
+            check(settings.floatingDoubleTapAction.value == com.thornotes.data.models.AppSettings.FLOATING_ACTION_NONE)
+            for (action in 0..1) {
+                settings.setFloatingDoubleTapAction(action)
+                check(com.thornotes.data.models.AppSettings(context).floatingDoubleTapAction.value == action)
+            }
+            check(runCatching { settings.setFloatingDoubleTapAction(2) }.isFailure)
+            context.getSharedPreferences("thornotes_prefs", 0).edit()
+                .putInt("floating_double_tap_action", 99).commit()
+            check(com.thornotes.data.models.AppSettings(context).floatingDoubleTapAction.value == 0)
+            checkFloatingButtonTaps(this)
             check(!settings.archiveNoticeSeen.value)
             settings.markArchiveNoticeSeen()
             check(com.thornotes.data.models.AppSettings(context).archiveNoticeSeen.value)

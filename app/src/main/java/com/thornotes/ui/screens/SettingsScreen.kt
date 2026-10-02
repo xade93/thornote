@@ -81,6 +81,7 @@ fun SettingsScreen(
     val cropEnabled by settings.cropEnabled.collectAsState()
     val ocrLanguage by settings.ocrLanguage.collectAsState()
     val floatingToggleEnabled by settings.floatingToggleEnabled.collectAsState()
+    val floatingDoubleTapAction by settings.floatingDoubleTapAction.collectAsState()
     val captureDebugLogEnabled by settings.captureDebugLogEnabled.collectAsState()
     val themeColor by settings.themeColor.collectAsState()
     val paddleStatus by textRecognizer.paddleOcr.assets.status.collectAsState()
@@ -255,6 +256,20 @@ fun SettingsScreen(
                                 )
                             }
                         },
+                    )
+                }
+                if (floatingToggleEnabled) {
+                    SettingsRow(label = "Double-tap action") {
+                        FloatingActionDropdown(floatingDoubleTapAction, settings::setFloatingDoubleTapAction)
+                    }
+                    Text(
+                        text = if (floatingDoubleTapAction == AppSettings.FLOATING_ACTION_TOP) {
+                            "Before playing, take one screenshot in ThorNotes to allow screen capture. Double-tap saves to your current page; single-tap shows or hides ThorNotes."
+                        } else {
+                            "Single-tap shows or hides ThorNotes. Double-tap does nothing."
+                        },
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -615,6 +630,33 @@ private fun OcrLanguageDropdown(
                     },
                     onClick = {
                         onLanguageSelected(option.value)
+                        expanded = false
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FloatingActionDropdown(selectedAction: Int, onSelected: (Int) -> Unit) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    val options = listOf(
+        AppSettings.FLOATING_ACTION_TOP to "Capture top screen",
+        AppSettings.FLOATING_ACTION_NONE to "Do nothing",
+    )
+    Box {
+        CompactSettingsOption(
+            label = "${options.first { it.first == selectedAction }.second} ▾",
+            selected = false,
+            onClick = { expanded = true },
+        )
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEach { (action, label) ->
+                DropdownMenuItem(
+                    text = { Text(label) },
+                    onClick = {
+                        onSelected(action)
                         expanded = false
                     },
                 )

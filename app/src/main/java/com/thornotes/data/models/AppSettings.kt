@@ -17,6 +17,7 @@ class AppSettings(context: Context) {
         private const val KEY_CROP_ENABLED = "crop_enabled"
         private const val KEY_OCR_LANGUAGE = "ocr_language"
         private const val KEY_FLOATING_TOGGLE_ENABLED = "floating_toggle_enabled"
+        private const val KEY_FLOATING_DOUBLE_TAP_ACTION = "floating_double_tap_action"
         private const val KEY_WELCOME_SEEN = "welcome_seen"
         private const val KEY_ARCHIVE_NOTICE_SEEN = "archive_notice_seen"
         internal const val KEY_CAPTURE_DEBUG_LOG_ENABLED = "capture_debug_log_enabled"
@@ -25,6 +26,9 @@ class AppSettings(context: Context) {
         const val TEXT_SIZE_SMALL = 0
         const val TEXT_SIZE_MEDIUM = 1
         const val TEXT_SIZE_LARGE = 2
+
+        const val FLOATING_ACTION_NONE = 0
+        const val FLOATING_ACTION_TOP = 1
 
         const val OCR_LANGUAGE_CHINESE_ENGLISH = 0
         const val OCR_LANGUAGE_ENGLISH = 1
@@ -57,6 +61,12 @@ class AppSettings(context: Context) {
         prefs.getBoolean(KEY_FLOATING_TOGGLE_ENABLED, false)
     )
     val floatingToggleEnabled: StateFlow<Boolean> = _floatingToggleEnabled
+
+    private val _floatingDoubleTapAction = MutableStateFlow(
+        prefs.getInt(KEY_FLOATING_DOUBLE_TAP_ACTION, FLOATING_ACTION_NONE)
+            .takeIf { it in FLOATING_ACTION_NONE..FLOATING_ACTION_TOP } ?: FLOATING_ACTION_NONE
+    )
+    val floatingDoubleTapAction: StateFlow<Int> = _floatingDoubleTapAction
 
     private val _welcomeSeen = MutableStateFlow(
         prefs.getBoolean(KEY_WELCOME_SEEN, false)
@@ -119,6 +129,12 @@ class AppSettings(context: Context) {
     fun setFloatingToggleEnabled(enabled: Boolean) {
         _floatingToggleEnabled.value = enabled
         prefs.edit().putBoolean(KEY_FLOATING_TOGGLE_ENABLED, enabled).apply()
+    }
+
+    fun setFloatingDoubleTapAction(action: Int) {
+        require(action in FLOATING_ACTION_NONE..FLOATING_ACTION_TOP)
+        _floatingDoubleTapAction.value = action
+        prefs.edit().putInt(KEY_FLOATING_DOUBLE_TAP_ACTION, action).apply()
     }
 
     fun setCaptureDebugLogEnabled(enabled: Boolean) {

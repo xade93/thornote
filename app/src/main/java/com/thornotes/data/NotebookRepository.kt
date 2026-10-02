@@ -169,7 +169,7 @@ class NotebookRepository(private val context: Context) {
         val imageDir = File(pageDir(pageId), "images").apply { mkdirs() }
         val imageFile = File(imageDir, "$id.jpg")
         imageFile.outputStream().use { output ->
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 92, output)
+            check(bitmap.compress(Bitmap.CompressFormat.JPEG, 92, output)) { "Could not encode screenshot" }
         }
         return addEntry(
             NotebookEntry(
