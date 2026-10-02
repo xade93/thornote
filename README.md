@@ -5,7 +5,7 @@ ThorNotes is a small bottom-screen notebook app with dual screen handheld in min
 
 When you play lots of games and switch between them, it is easy to forget what was happening in each one. ThorNotes helps by letting you quickly save in-game screenshots or OCR text from a selected screen region, then browse everything later in a clean bottom-screen interface.
 
-It is still rough, but I find it already useful for visual novels, detective games, RPGs, and other games where you want to keep track of details, clues, dialogue, names, or memorable moments without leaving the game.
+It is still rough, but I find it already useful for puzzle games, visual novels, RPGs, and other games where you want to keep track of maps, clues, dialogue, names, or memorable moments without leaving the game.
 
 On device photo:
 <img width="1657" height="573" alt="image" src="https://github.com/user-attachments/assets/2ffa52d3-0f83-4447-88d2-aade5d125a15" />
@@ -36,8 +36,6 @@ Screenshots:
 echo "sdk.dir=$HOME/Android/sdk" > local.properties
 JAVA_HOME=/usr/lib/jvm/java-17-openjdk ./gradlew installDebug
 ```
-
-Requires Android SDK compileSdk 35 and JDK 17.
 
 ## Credits
 
