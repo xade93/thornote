@@ -21,8 +21,8 @@ android {
         applicationId = "com.thornotes"
         minSdk = 30
         targetSdk = 35
-        versionCode = 9
-        versionName = "0.4.5"
+        versionCode = 10
+        versionName = "0.4.6"
 
         testInstrumentationRunner = "com.thornotes.DiagnosticsCheck"
 

@@ -23,7 +23,7 @@ The SDK/NDK versions used in CI are listed in [the Android workflow](../.github/
 
 Add `--offline` when all dependencies are already cached. On Arch Linux, prefix the command with `JAVA_HOME=/usr/lib/jvm/java-17-openjdk` if your default Java version differs.
 
-APKs are generated in `app/build/outputs/apk/{debug,release}/` with names such as `ThorNotes-0.4.5-release.apk`. Release signing uses the ignored `keystore.properties`; keep it and the signing key private. Without that configuration, the release APK is unsigned.
+APKs are generated in `app/build/outputs/apk/{debug,release}/` with names such as `ThorNotes-0.4.6-release.apk`. Release signing uses the ignored `keystore.properties`; keep it and the signing key private. Without that configuration, the release APK is unsigned.
 
 Generated output stays in `app/build/`, `app/.cxx/`, `.gradle/`, and `.kotlin/`; these directories are ignored. Use `./gradlew clean` to remove build output when needed. Keep vendor libraries and bundled assets: they are build inputs.
 
