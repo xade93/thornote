@@ -7,6 +7,8 @@ import android.hardware.display.DisplayManager
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
+import android.os.Handler
+import android.os.Looper
 import android.os.IBinder
 import android.provider.Settings
 import android.view.Display
@@ -37,10 +39,18 @@ class FloatingToggleService : Service() {
     private var appHidden = false
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var capturing = false
+    private val displayListener = object : DisplayManager.DisplayListener {
+        override fun onDisplayAdded(displayId: Int) = updateDisplay()
+        override fun onDisplayRemoved(displayId: Int) = updateDisplay()
+        override fun onDisplayChanged(displayId: Int) = updateDisplay()
+    }
     private val app get() = application as ThorNotesApp
 
     override fun onCreate() {
         super.onCreate()
+        getSystemService(DisplayManager::class.java).registerDisplayListener(
+            displayListener, Handler(Looper.getMainLooper()),
+        )
         if (!Settings.canDrawOverlays(this)) {
             stopSelf()
         }
@@ -52,9 +62,7 @@ class FloatingToggleService : Service() {
             return START_NOT_STICKY
         }
 
-        val displayId = intent?.getIntExtra(EXTRA_DISPLAY_ID, Display.DEFAULT_DISPLAY)
-            ?: Display.DEFAULT_DISPLAY
-        ensureToggleView(displayId)
+        updateDisplay()
 
         if (intent?.action == ACTION_APP_VISIBLE) {
             appHidden = false
@@ -65,9 +73,32 @@ class FloatingToggleService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        getSystemService(DisplayManager::class.java).unregisterDisplayListener(displayListener)
         scope.cancel()
         removeToggleView()
         super.onDestroy()
+    }
+
+    private fun updateDisplay() {
+        if (!Settings.canDrawOverlays(this)) {
+            stopSelf()
+            return
+        }
+        val target = preferredDisplayId()
+        try {
+            ensureToggleView(target)
+        } catch (error: RuntimeException) {
+            android.util.Log.w("ThorNotes", "Unable to show floating button on display $target", error)
+            if (target != Display.DEFAULT_DISPLAY) {
+                try {
+                    ensureToggleView(Display.DEFAULT_DISPLAY)
+                    return
+                } catch (fallbackError: RuntimeException) {
+                    android.util.Log.w("ThorNotes", "Unable to show floating button", fallbackError)
+                }
+            }
+            stopSelf()
+        }
     }
 
     private fun ensureToggleView(displayId: Int) {
@@ -121,7 +152,11 @@ class FloatingToggleService : Service() {
 
     private fun removeToggleView() {
         toggleView?.let { view ->
-            windowManager?.removeView(view)
+            try {
+                windowManager?.removeView(view)
+            } catch (_: IllegalArgumentException) {
+                // Android may already have removed the window with its display.
+            }
         }
         toggleView = null
         windowManager = null
@@ -141,8 +176,12 @@ class FloatingToggleService : Service() {
 
     private fun toggleAppVisibility() {
         if (appHidden) {
-            startActivity(serviceIntent())
-            appHidden = false
+            val target = preferredDisplayId()
+            if (launchNotesOnDisplay(serviceIntent(), target) ||
+                (target != Display.DEFAULT_DISPLAY &&
+                    launchNotesOnDisplay(serviceIntent(), Display.DEFAULT_DISPLAY))) {
+                appHidden = false
+            }
         } else {
             sendBroadcast(Intent(MainActivity.ACTION_HIDE_APP).setPackage(packageName))
             appHidden = true
@@ -204,7 +243,6 @@ class FloatingToggleService : Service() {
 
     companion object {
         const val ACTION_APP_VISIBLE = "com.thornotes.ACTION_APP_VISIBLE"
-        const val EXTRA_DISPLAY_ID = "com.thornotes.EXTRA_DISPLAY_ID"
     }
 }
 

@@ -26,6 +26,8 @@ Screenshots:
 
 ## Screen capture
 
+ThorNotes and its floating button prefer an available secondary presentation display (the bottom screen on dual-screen handhelds), falling back to the main screen when unavailable. If several secondary screens are connected, Android’s presentation-display order decides the target.
+
 Requires Android 11 or newer. Tap Shot or OCR to open the capture setup prompt, enable ThorNotes in Android Accessibility settings, then return and tap capture again. The accessibility service takes an on-demand screenshot of the default (top) display; screenshots and OCR text stay on your device. Disable the service in Accessibility settings to revoke access. Apps that protect their screen content cannot be captured.
 
 ## Data and Backup

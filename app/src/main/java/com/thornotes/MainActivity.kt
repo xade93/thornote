@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Bitmap
+import android.hardware.display.DisplayManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -55,6 +56,12 @@ class MainActivity : ComponentActivity() {
     lateinit var settings: AppSettings
     lateinit var notebook: NotebookRepository
     private var releasedInputFocus = false
+    private var attemptedDisplayId: Int? = null
+    private val displayListener = object : DisplayManager.DisplayListener {
+        override fun onDisplayAdded(displayId: Int) = preferBottomDisplay()
+        override fun onDisplayRemoved(displayId: Int) = preferBottomDisplay()
+        override fun onDisplayChanged(displayId: Int) = preferBottomDisplay()
+    }
     private val hideAppReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == ACTION_HIDE_APP) {
@@ -205,11 +212,27 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         com.thornotes.capture.CaptureDebugLog.append(this, "activity_resume")
+        preferBottomDisplay()
         syncFloatingToggleService()
+    }
+
+    private fun preferBottomDisplay() {
+        val target = preferredDisplayId()
+        if (display?.displayId == target) {
+            attemptedDisplayId = null
+        } else if (attemptedDisplayId != target) {
+            attemptedDisplayId = target
+            launchNotesOnDisplay(Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            }, target)
+        }
     }
 
     override fun onStart() {
         super.onStart()
+        getSystemService(DisplayManager::class.java).registerDisplayListener(
+            displayListener, Handler(Looper.getMainLooper()),
+        )
         if (settings.floatingToggleEnabled.value && Settings.canDrawOverlays(this)) {
             startService(
                 floatingToggleServiceIntent(FloatingToggleService.ACTION_APP_VISIBLE),
@@ -260,6 +283,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onStop() {
+        getSystemService(DisplayManager::class.java).unregisterDisplayListener(displayListener)
         com.thornotes.capture.CaptureDebugLog.append(this, "activity_stop")
         super.onStop()
     }
@@ -280,11 +304,9 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    @Suppress("DEPRECATION")
     private fun floatingToggleServiceIntent(actionName: String? = null): Intent {
         return Intent(this, FloatingToggleService::class.java).apply {
             action = actionName
-            putExtra(FloatingToggleService.EXTRA_DISPLAY_ID, windowManager.defaultDisplay.displayId)
         }
     }
 }

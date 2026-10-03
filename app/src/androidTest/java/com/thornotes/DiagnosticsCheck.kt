@@ -30,6 +30,7 @@ class DiagnosticsCheck : Instrumentation() {
                 .putInt("floating_double_tap_action", 99).commit()
             check(com.thornotes.data.models.AppSettings(context).floatingDoubleTapAction.value == 0)
             checkFloatingButtonTaps(this)
+            checkDisplayPreference(targetContext)
             check(!settings.archiveNoticeSeen.value)
             settings.markArchiveNoticeSeen()
             check(com.thornotes.data.models.AppSettings(context).archiveNoticeSeen.value)
