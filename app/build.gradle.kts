@@ -121,12 +121,6 @@ dependencies {
     // Gson - JSON parsing for dictionary result fields
     implementation("com.google.code.gson:gson:2.11.0")
 
-    // Room is not currently used. Keep this here only if notebook storage moves
-    // from JSON files to SQLite.
-    // implementation("androidx.room:room-runtime:2.6.1")
-    // implementation("androidx.room:room-ktx:2.6.1")
-    // ksp("androidx.room:room-compiler:2.6.1")
-
     // Debug
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

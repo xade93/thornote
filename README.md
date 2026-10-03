@@ -44,6 +44,8 @@ echo "sdk.dir=$HOME/Android/sdk" > local.properties
 JAVA_HOME=/usr/lib/jvm/java-17-openjdk ./gradlew installDebug
 ```
 
+See [Development](docs/development.md) for the repository layout, build outputs, and checks.
+
 ## Credits
 
 ThorNotes started from work based on ThorTranslate. Credit to ThorTranslate (ie ThorLens) author for the initial program.

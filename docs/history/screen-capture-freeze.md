@@ -1,4 +1,4 @@
-# Screen Capture Freeze Notes
+# Screen Capture Freeze Notes (historical)
 
 This file documents the ThorNotes Shot-button freeze seen on the Ayn Thor device, what evidence we collected, and what mitigations have been tried.
 
@@ -76,7 +76,7 @@ Why it helped:
 
 ### Latest-Frame Cache
 
-ThorNotes now drains `ImageReader` frames while idle and keeps only the newest cached bitmap.
+The old pipeline drained `ImageReader` frames while idle and keeps only the newest cached bitmap.
 
 Why it helped:
 
@@ -105,9 +105,9 @@ The file is capped at 128 KB and trims older lines. It logs lifecycle events suc
 
 This is intentionally event-level logging, not frame-by-frame logging.
 
-## Current Avoidance Strategy
+## Last MediaProjection Avoidance Strategy
 
-The latest mitigation is a projection-settle wait before first session creation.
+The last mitigation was a projection-settle wait before first session creation.
 
 Reason:
 
@@ -115,7 +115,7 @@ Reason:
 - Logcat still showed SystemUI/projection activity immediately before that.
 - Creating the virtual display while permission/SystemUI/display state is still settling may trigger the firmware/display-stack deadlock.
 
-Current behavior:
+Behavior at that time:
 
 - After a new `MediaProjection` is received, the first capture waits up to 1500 ms before creating the first `VirtualDisplay`.
 - Existing reusable sessions skip this delay.
@@ -140,7 +140,7 @@ capture_complete source=listener ...
 
 If it freezes again and the last line is still `capture_session_creating`, then the settle wait was not enough and the next mitigation should be more drastic.
 
-## Next Escalation If It Still Freezes
+## Escalation Options Considered Before Replacement
 
 If the device still freezes inside first `createVirtualDisplay(...)`, consider changing the interaction model:
 
@@ -182,7 +182,7 @@ adb logcat -d -t 800 | rg -n "ThorNotes|MediaProjection|VirtualDisplay|DisplayDe
 
 This is likely not a normal ThorNotes app crash. The strongest current hypothesis is a firmware/display-stack bug on the device triggered by `MediaProjection.createVirtualDisplay(...)`, especially when called immediately after permission flow or during virtual-display lifecycle churn.
 
-ThorNotes should therefore:
+The recommendation for the old pipeline was to:
 
 - minimize `createVirtualDisplay(...)` calls,
 - reuse the capture session when possible,

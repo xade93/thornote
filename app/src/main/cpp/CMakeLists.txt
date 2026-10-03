@@ -33,7 +33,7 @@ set_target_properties(
     paddle_light_api_shared
     PROPERTIES
     IMPORTED_LOCATION
-    ${PaddleLite_DIR}/libs/${ANDROID_ABI}/libpaddle_light_api_shared.so)
+    ${CMAKE_CURRENT_SOURCE_DIR}/../jniLibs/${ANDROID_ABI}/libpaddle_light_api_shared.so)
 
 find_library(log-lib log)
 find_library(jnigraphics-lib jnigraphics)
