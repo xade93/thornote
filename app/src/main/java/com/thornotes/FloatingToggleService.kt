@@ -155,16 +155,15 @@ class FloatingToggleService : Service() {
         scope.launch {
             val view = toggleView
             try {
-                val manager = ScreenCaptureService.captureManager
-                check(manager?.isReady == true) {
-                    "Open ThorNotes and take one screenshot to allow screen capture, then try again."
+                check(ScreenCaptureService.isReady) {
+                    "Enable ThorNotes in Android Accessibility settings, then try again."
                 }
                 showFeedback("…", Color.WHITE, "Capturing top screen")
                 if (overlayDisplayId == Display.DEFAULT_DISPLAY) {
                     view?.alpha = 0f
                     delay(150) // Let the top-screen capture update without the button.
                 }
-                val bitmap = manager.captureScreen() ?: error("Couldn’t capture. Wait a moment and try again.")
+                val bitmap = ScreenCaptureService.captureScreen() ?: error("Couldn’t capture. Wait a moment and try again.")
                 try {
                     withContext(Dispatchers.IO) { app.notebook.addScreenshot(bitmap) }
                 } finally {
@@ -177,8 +176,8 @@ class FloatingToggleService : Service() {
             } catch (error: Exception) {
                 showFeedback("!", 0xFFEF5350.toInt(), "Screenshot failed")
                 Toast.makeText(this@FloatingToggleService,
-                    if (ScreenCaptureService.captureManager?.isReady != true) {
-                        "Open ThorNotes and take one screenshot to allow screen capture."
+                    if (!ScreenCaptureService.isReady) {
+                        "Enable ThorNotes in Android Accessibility settings."
                     } else {
                         "Couldn’t save screenshot. Try again."
                     }, Toast.LENGTH_LONG).show()

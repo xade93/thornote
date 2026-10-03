@@ -1,110 +1,88 @@
 package com.thornotes.capture
 
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.Service
+import android.accessibilityservice.AccessibilityService
 import android.content.Intent
-import android.content.pm.ServiceInfo
-import android.media.projection.MediaProjectionManager
-import android.os.Build
-import android.os.IBinder
-import android.util.Log
-import androidx.core.app.NotificationCompat
+import android.graphics.Bitmap
+import android.view.Display
+import android.view.accessibility.AccessibilityEvent
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.withTimeoutOrNull
 
-class ScreenCaptureService : Service() {
-
+class ScreenCaptureService : AccessibilityService() {
     companion object {
-        private const val TAG = "ThorNotes"
-        const val CHANNEL_ID = "thornotes_capture"
-        const val NOTIFICATION_ID = 1
-        const val EXTRA_RESULT_CODE = "result_code"
-        const val EXTRA_RESULT_DATA = "result_data"
+        @Volatile
+        private var instance: ScreenCaptureService? = null
+        val isReady: Boolean get() = instance != null
 
-        // Shared reference so the Activity can access the projection
-        var captureManager: ScreenCaptureManager? = null
+        suspend fun captureScreen(): Bitmap? = instance?.capture()
     }
 
-    override fun onCreate() {
-        super.onCreate()
-        Log.d(TAG, "Service onCreate")
-        createNotificationChannel()
+    private val captureMutex = Mutex()
+
+    override fun onServiceConnected() {
+        instance = this
+        CaptureDebugLog.append(this, "accessibility_connected")
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.d(TAG, "Service onStartCommand")
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit
+    override fun onInterrupt() = Unit
 
-        // Start foreground FIRST — required before getMediaProjection on Android 14+
-        val notification = createNotification()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(
-                NOTIFICATION_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
-            )
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
-        }
-        Log.d(TAG, "Service startForeground called")
-
-        // Now safe to initialize MediaProjection
-        val resultCode = intent?.getIntExtra(EXTRA_RESULT_CODE, 0) ?: 0
-
-        @Suppress("DEPRECATION")
-        val resultData: Intent? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            intent?.getParcelableExtra(EXTRA_RESULT_DATA, Intent::class.java)
-        } else {
-            intent?.getParcelableExtra(EXTRA_RESULT_DATA)
-        }
-
-        Log.d(TAG, "Service resultCode=$resultCode, resultData=${resultData != null}, captureManager=${captureManager != null}")
-
-        if (resultData != null) {
-            try {
-                val projectionManager =
-                    getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-                val projection = projectionManager.getMediaProjection(resultCode, resultData)
-                Log.d(TAG, "Service got MediaProjection: ${projection != null}")
-                if (projection != null) {
-                    captureManager?.setProjection(projection)
-                        ?: Log.e(TAG, "captureManager is null!")
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to get MediaProjection", e)
-            }
-        } else {
-            Log.e(TAG, "Missing resultCode or resultData")
-        }
-
-        return START_NOT_STICKY
+    override fun onUnbind(intent: Intent?): Boolean {
+        if (instance === this) instance = null
+        return super.onUnbind(intent)
     }
-
-    override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        if (instance === this) instance = null
         super.onDestroy()
-        Log.d(TAG, "Service onDestroy")
-        captureManager = null
     }
 
-    private fun createNotificationChannel() {
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            "Screen Capture",
-            NotificationManager.IMPORTANCE_LOW
-        ).apply {
-            description = "ThorNotes screen capture active"
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private suspend fun capture(): Bitmap? {
+        if (!captureMutex.tryLock()) return null
+        try {
+            CaptureDebugLog.append(this, "capture_started")
+            return withTimeoutOrNull(3_000) {
+                suspendCancellableCoroutine { continuation ->
+                    // Also release a delivered bitmap if cancellation wins before the caller resumes.
+                    fun complete(bitmap: Bitmap?) {
+                        continuation.resume(bitmap) { bitmap?.recycle() }
+                    }
+                    try {
+                        takeScreenshot(Display.DEFAULT_DISPLAY, mainExecutor, object : TakeScreenshotCallback {
+                            override fun onSuccess(result: ScreenshotResult) {
+                                val bitmap = try {
+                                    result.hardwareBuffer.use { buffer ->
+                                        if (!continuation.isActive) return@use null
+                                        val hardwareBitmap = Bitmap.wrapHardwareBuffer(buffer, result.colorSpace)
+                                        try {
+                                            hardwareBitmap?.copy(Bitmap.Config.ARGB_8888, false)
+                                        } finally {
+                                            hardwareBitmap?.recycle()
+                                        }
+                                    }
+                                } catch (error: Exception) {
+                                    CaptureDebugLog.append(this@ScreenCaptureService, "capture_conversion_failed error=${error.javaClass.simpleName}")
+                                    null
+                                }
+                                CaptureDebugLog.append(this@ScreenCaptureService, "capture_complete success=${bitmap != null}")
+                                complete(bitmap)
+                            }
+
+                            override fun onFailure(errorCode: Int) {
+                                CaptureDebugLog.append(this@ScreenCaptureService, "capture_failed code=$errorCode")
+                                complete(null)
+                            }
+                        })
+                    } catch (error: Exception) {
+                        CaptureDebugLog.append(this@ScreenCaptureService, "capture_failed error=${error.javaClass.simpleName}")
+                        complete(null)
+                    }
+                }
+            }
+        } finally {
+            captureMutex.unlock()
         }
-        val manager = getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(channel)
-    }
-
-    private fun createNotification(): Notification {
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("ThorNotes")
-            .setContentText("Ready to capture")
-            .setSmallIcon(android.R.drawable.ic_menu_camera)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .build()
     }
 }

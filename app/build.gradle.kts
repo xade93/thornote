@@ -19,7 +19,7 @@ android {
 
     defaultConfig {
         applicationId = "com.thornotes"
-        minSdk = 26
+        minSdk = 30
         targetSdk = 35
         versionCode = 9
         versionName = "0.4.5"

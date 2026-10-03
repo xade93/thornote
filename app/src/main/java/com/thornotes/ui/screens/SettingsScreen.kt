@@ -81,6 +81,7 @@ fun SettingsScreen(
     val cropEnabled by settings.cropEnabled.collectAsState()
     val ocrLanguage by settings.ocrLanguage.collectAsState()
     val floatingToggleEnabled by settings.floatingToggleEnabled.collectAsState()
+    val tapAfterCapture by settings.tapAfterCapture.collectAsState()
     val floatingDoubleTapAction by settings.floatingDoubleTapAction.collectAsState()
     val captureDebugLogEnabled by settings.captureDebugLogEnabled.collectAsState()
     val themeColor by settings.themeColor.collectAsState()
@@ -264,7 +265,7 @@ fun SettingsScreen(
                     }
                     Text(
                         text = if (floatingDoubleTapAction == AppSettings.FLOATING_ACTION_TOP) {
-                            "Before playing, take one screenshot in ThorNotes to allow screen capture. Double-tap saves to your current page; single-tap shows or hides ThorNotes."
+                            "Enable ThorNotes in Android Accessibility settings to allow screen capture. Double-tap saves to your current page; single-tap shows or hides ThorNotes."
                         } else {
                             "Single-tap shows or hides ThorNotes. Double-tap does nothing."
                         },
@@ -272,6 +273,21 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+            }
+
+            SettingsSection(title = "Screen capture") {
+                SettingsRow(label = "Tap top screen after capture") {
+                    Switch(
+                        checked = tapAfterCapture,
+                        onCheckedChange = settings::setTapAfterCapture,
+                        modifier = Modifier.semantics { contentDescription = "Tap top screen after capture" },
+                    )
+                }
+                Text(
+                    text = "Sends a tap near the top-center of the game screen to restore focus after a screenshot or OCR capture.",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
 
             SettingsSection(title = "Text recognition") {

@@ -32,7 +32,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import com.thornotes.analysis.EnglishDictionaryLookup
-import com.thornotes.capture.ScreenCaptureManager
 import com.thornotes.data.NotebookRepository
 import com.thornotes.data.models.AppSettings
 import com.thornotes.data.models.CaptureState
@@ -51,7 +50,6 @@ class MainActivity : ComponentActivity() {
         const val ACTION_HIDE_APP = "com.thornotes.ACTION_HIDE_APP"
     }
 
-    lateinit var captureManager: ScreenCaptureManager
     lateinit var textRecognizer: TextRecognizer
     lateinit var dictionary: EnglishDictionaryLookup
     lateinit var settings: AppSettings
@@ -77,7 +75,6 @@ class MainActivity : ComponentActivity() {
         )
         com.thornotes.capture.CaptureDebugLog.session(this)
         settings = (application as ThorNotesApp).settings
-        captureManager = ScreenCaptureManager(this, settings)
         textRecognizer = TextRecognizer(this)
         dictionary = EnglishDictionaryLookup(this)
         notebook = (application as ThorNotesApp).notebook
@@ -173,7 +170,6 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                     else -> MainScreen(
-                        captureManager = captureManager,
                         textRecognizer = textRecognizer,
                         dictionary = dictionary,
                         settings = settings,
@@ -231,6 +227,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun tapTopDisplay() {
+        if (!settings.tapAfterCapture.value) return
         val metrics = DisplayMetrics()
         @Suppress("DEPRECATION")
         windowManager.defaultDisplay.getRealMetrics(metrics)
@@ -270,7 +267,6 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         unregisterReceiver(hideAppReceiver)
-        captureManager.release()
         textRecognizer.close()
         dictionary.close()
     }

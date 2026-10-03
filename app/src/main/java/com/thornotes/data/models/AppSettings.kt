@@ -17,6 +17,7 @@ class AppSettings(context: Context) {
         private const val KEY_CROP_ENABLED = "crop_enabled"
         private const val KEY_OCR_LANGUAGE = "ocr_language"
         private const val KEY_FLOATING_TOGGLE_ENABLED = "floating_toggle_enabled"
+        private const val KEY_TAP_AFTER_CAPTURE = "tap_after_capture"
         private const val KEY_FLOATING_DOUBLE_TAP_ACTION = "floating_double_tap_action"
         private const val KEY_WELCOME_SEEN = "welcome_seen"
         private const val KEY_ARCHIVE_NOTICE_SEEN = "archive_notice_seen"
@@ -61,6 +62,9 @@ class AppSettings(context: Context) {
         prefs.getBoolean(KEY_FLOATING_TOGGLE_ENABLED, false)
     )
     val floatingToggleEnabled: StateFlow<Boolean> = _floatingToggleEnabled
+
+    private val _tapAfterCapture = MutableStateFlow(prefs.getBoolean(KEY_TAP_AFTER_CAPTURE, true))
+    val tapAfterCapture: StateFlow<Boolean> = _tapAfterCapture
 
     private val _floatingDoubleTapAction = MutableStateFlow(
         prefs.getInt(KEY_FLOATING_DOUBLE_TAP_ACTION, FLOATING_ACTION_NONE)
@@ -129,6 +133,11 @@ class AppSettings(context: Context) {
     fun setFloatingToggleEnabled(enabled: Boolean) {
         _floatingToggleEnabled.value = enabled
         prefs.edit().putBoolean(KEY_FLOATING_TOGGLE_ENABLED, enabled).apply()
+    }
+
+    fun setTapAfterCapture(enabled: Boolean) {
+        _tapAfterCapture.value = enabled
+        prefs.edit().putBoolean(KEY_TAP_AFTER_CAPTURE, enabled).apply()
     }
 
     fun setFloatingDoubleTapAction(action: Int) {

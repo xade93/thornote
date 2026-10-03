@@ -20,9 +20,13 @@ Screenshots:
 - Keep **multiple notebook pages**, so different games can have separate notes; Browse saved screenshots with thumbnails for quick jumping.
 - Double-tap the time to turn the bottom screen black for **OLED blackout mode**, then double-tap again to restore.
 - Optional **floating overlay button** to hide or restore ThorNotes while playing, to use other second screen app. Coexist well with other floating apps e.g. DS Overlay.
-- Set the floating button’s **double-tap action** to capture the top screen or do nothing. Take one screenshot in ThorNotes first to allow screen capture, then keep the app running in the background. A green ✓ confirms the screenshot was saved to your current page; a red ! means it failed.
+- Set the floating button’s **double-tap action** to capture the top screen or do nothing. Enable ThorNotes in Android Accessibility settings to allow screen capture. A green ✓ confirms the screenshot was saved to your current page; a red ! means it failed.
 - **Backup and restore** notebook from Settings.
 - Use the offline English **dictionary** page for quick lookup.
+
+## Screen capture
+
+Requires Android 11 or newer. Tap Shot or OCR to open the capture setup prompt, enable ThorNotes in Android Accessibility settings, then return and tap capture again. The accessibility service takes an on-demand screenshot of the default (top) display; screenshots and OCR text stay on your device. Disable the service in Accessibility settings to revoke access. Apps that protect their screen content cannot be captured.
 
 ## Data and Backup
 

@@ -1,6 +1,5 @@
 package com.thornotes.ui.screens
 
-import android.app.Activity
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -8,6 +7,7 @@ import android.content.IntentFilter
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.BatteryManager
+import android.provider.Settings
 import android.os.SystemClock
 import android.text.Editable
 import android.text.InputType
@@ -19,8 +19,6 @@ import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -88,10 +86,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.content.ContextCompat
 import com.thornotes.analysis.EnglishDictionaryLookup
 import com.thornotes.capture.CaptureDebugLog
-import com.thornotes.capture.ScreenCaptureManager
 import com.thornotes.capture.ScreenCaptureService
 import com.thornotes.data.NotebookRepository
 import com.thornotes.data.models.AppSettings
@@ -117,8 +113,7 @@ private enum class NotebookPage {
     DICTIONARY,
 }
 
-private enum class PendingCapture {
-    NONE,
+private enum class CaptureAction {
     SCREENSHOT,
     REGION_OCR,
     CROP,
@@ -127,12 +122,10 @@ private enum class PendingCapture {
 private val StarBorderColor = Color(0xFFFFC107)
 private val PinBorderColor = Color(0xFF4DD0E1)
 private const val DoubleTapWindowMillis = 300L
-private const val CaptureButtonCooldownMillis = 1_000L
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
-    captureManager: ScreenCaptureManager,
     textRecognizer: TextRecognizer,
     dictionary: EnglishDictionaryLookup,
     settings: AppSettings,
@@ -156,9 +149,8 @@ fun MainScreen(
     var currentPage by remember { mutableStateOf(NotebookPage.NOTEBOOK) }
     var dictionaryResult by remember { mutableStateOf<List<EnglishDictionaryEntry>>(emptyList()) }
     var dictionaryInput by remember { mutableStateOf("") }
-    var pendingCapture by remember { mutableStateOf(PendingCapture.NONE) }
+    var showCaptureSetup by remember { mutableStateOf(false) }
     var screenBlackout by remember { mutableStateOf(false) }
-    var lastCaptureRequestAt by remember { mutableStateOf(0L) }
     val captureRequestInFlight = remember { AtomicBoolean(false) }
     val isProcessing = captureState is CaptureState.Capturing || captureState is CaptureState.Processing
 
@@ -186,7 +178,7 @@ fun MainScreen(
         scope.launch {
             try {
                 onCaptureStateChange(CaptureState.Capturing)
-                val bitmap = captureManager.captureScreen()
+                val bitmap = ScreenCaptureService.captureScreen()
                 if (bitmap == null) {
                     onCaptureStateChange(CaptureState.Error("Failed to capture screen"))
                     onRestoreGameFocus()
@@ -211,7 +203,7 @@ fun MainScreen(
         scope.launch {
             try {
                 onCaptureStateChange(CaptureState.Capturing)
-                val fullBitmap = captureManager.captureScreen()
+                val fullBitmap = ScreenCaptureService.captureScreen()
                 if (fullBitmap == null) {
                     onCaptureStateChange(CaptureState.Error("Failed to capture screen"))
                     onRestoreGameFocus()
@@ -241,10 +233,11 @@ fun MainScreen(
     fun openCropSelector() {
         scope.launch {
             try {
-                val bitmap = captureManager.captureScreen()
+                val bitmap = ScreenCaptureService.captureScreen()
                 if (bitmap != null) {
                     onCropClick(bitmap)
                 } else {
+                    onCaptureStateChange(CaptureState.Error("Failed to capture screen"))
                 }
             } finally {
                 finishCaptureRequest()
@@ -252,54 +245,44 @@ fun MainScreen(
         }
     }
 
-    fun runPendingCapture() {
-        val action = pendingCapture
-        when (action) {
-            PendingCapture.SCREENSHOT -> captureScreenshotEntry()
-            PendingCapture.REGION_OCR -> captureRegionOcrEntry()
-            PendingCapture.CROP -> openCropSelector()
-            PendingCapture.NONE -> finishCaptureRequest()
-        }
-        pendingCapture = PendingCapture.NONE
-    }
-
-    val projectionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK && result.data != null) {
-            ScreenCaptureService.captureManager = captureManager
-            val serviceIntent = Intent(context, ScreenCaptureService::class.java).apply {
-                putExtra(ScreenCaptureService.EXTRA_RESULT_CODE, result.resultCode)
-                putExtra(ScreenCaptureService.EXTRA_RESULT_DATA, result.data)
-            }
-            ContextCompat.startForegroundService(context, serviceIntent)
-            captureManager.awaitProjectionReady { runPendingCapture() }
-        } else {
-            pendingCapture = PendingCapture.NONE
-            finishCaptureRequest()
-            onCaptureStateChange(CaptureState.Error("Permission denied"))
-        }
-    }
-
-    fun requestCapture(action: PendingCapture) {
+    fun requestCapture(action: CaptureAction) {
         if (isProcessing) {
-            return
-        }
-        val now = SystemClock.elapsedRealtime()
-        if (now - lastCaptureRequestAt < CaptureButtonCooldownMillis) {
             return
         }
         if (!captureRequestInFlight.compareAndSet(false, true)) {
             return
         }
-        lastCaptureRequestAt = now
-        pendingCapture = action
-        if (captureManager.isReady) {
-            runPendingCapture()
-        } else {
-            val intent = captureManager.createScreenCaptureIntent()
-            projectionLauncher.launch(intent)
+        if (!ScreenCaptureService.isReady) {
+            finishCaptureRequest()
+            showCaptureSetup = true
+            return
         }
+        when (action) {
+            CaptureAction.SCREENSHOT -> captureScreenshotEntry()
+            CaptureAction.REGION_OCR -> captureRegionOcrEntry()
+            CaptureAction.CROP -> openCropSelector()
+        }
+    }
+
+    if (showCaptureSetup) {
+        AlertDialog(
+            onDismissRequest = { showCaptureSetup = false },
+            title = { Text("Enable screen capture") },
+            text = { Text("ThorNotes uses accessibility access to capture the top screen when you tap Shot, OCR, or the floating button. Screenshots and recognized text stay on your device. Enable ThorNotes in Accessibility settings, then return and tap capture again.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showCaptureSetup = false
+                    try {
+                        context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                    } catch (error: android.content.ActivityNotFoundException) {
+                        onCaptureStateChange(CaptureState.Error("Open Android Settings → Accessibility and enable ThorNotes."))
+                    }
+                }) { Text("Open settings") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCaptureSetup = false }) { Text("Cancel") }
+            },
+        )
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -334,16 +317,16 @@ fun MainScreen(
                     CompactCaptureBar(
                         cropEnabled = cropEnabled,
                         isProcessing = isProcessing,
-                        onScreenshotClick = { requestCapture(PendingCapture.SCREENSHOT) },
+                        onScreenshotClick = { requestCapture(CaptureAction.SCREENSHOT) },
                         onTextClick = { notebook.addTextChunk("") },
                         onOcrClick = {
                             if (cropEnabled) {
-                                requestCapture(PendingCapture.REGION_OCR)
+                                requestCapture(CaptureAction.REGION_OCR)
                             } else {
-                                requestCapture(PendingCapture.CROP)
+                                requestCapture(CaptureAction.CROP)
                             }
                         },
-                        onEditRegionClick = { requestCapture(PendingCapture.CROP) },
+                        onEditRegionClick = { requestCapture(CaptureAction.CROP) },
                     )
                 }
             },

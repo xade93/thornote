@@ -2,7 +2,11 @@
 
 This file documents the ThorNotes Shot-button freeze seen on the Ayn Thor device, what evidence we collected, and what mitigations have been tried.
 
-## Symptom
+## Replacement (October 2026)
+
+The pipeline below has been removed. ThorNotes now uses `AccessibilityService.takeScreenshot` on the default display, on demand. No projection, virtual display, image reader, cached frames, or settle wait remains. Enable ThorNotes in Android Accessibility settings before capturing. The bounded capture debug log is retained. The notes below preserve the evidence behind this change; the replacement still needs verification on the affected device.
+
+## Historical symptom
 
 - Pressing `Shot` can freeze the whole Android device, not just ThorNotes.
 - During the freeze, the device may become nonresponsive to normal input and may appear to reboot or recover only after some time.
@@ -10,7 +14,7 @@ This file documents the ThorNotes Shot-button freeze seen on the Ayn Thor device
 
 ## Capture Path
 
-ThorNotes uses Android `MediaProjection` for screen capture:
+The removed pipeline used Android `MediaProjection` for screen capture:
 
 1. User taps `Shot`.
 2. If no projection exists, Android shows the screen-capture permission UI.
